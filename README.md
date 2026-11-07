@@ -1,3 +1,27 @@
+# Lumen: local editing fork
+
+A source fork of [Mas-inx/lumen-ai-video-editor](https://github.com/Mas-inx/lumen-ai-video-editor), maintained under **devtobuilder**. The upstream MIT license and attribution are retained.
+
+This fork adds native editable workflows driven by local Ollama models, CUDA Whisper transcription, local ClearVoice speech enhancement with adaptive de-essing, conservative retake selection, stable animated-caption layout, and bounded decoder lifetimes for rapid-cut 4K exports. Video, voice, captions and keyframes remain editable in Lumen.
+
+## Local setup and build
+
+See [local-engine/README.md](local-engine/README.md) for the Windows setup, separate Python environments, local model downloads and readiness checks. Then use `npm ci` and `npm run build`, or the upstream packaging commands below. Model weights, recordings, projects, environments and machine configuration are intentionally excluded from the source tree.
+
+The local engine was exercised on an NVIDIA RTX 3080 with 10 GB VRAM. AI workloads run sequentially to share GPU memory. A fresh-machine installer has not been validated; this repository provides source and setup scripts.
+
+## Behavior and limits
+
+- Ollama makes native tool calls; completion is checked against actual editor results.
+- Only high-confidence retake candidates are eligible for automatic deletion. Ambiguous repetitions stay for review.
+- Voice cleanup includes conservative de-essing. It cannot reconstruct clipped or missing speech.
+- H.264 MP4 export uses a local compatibility finalization pass, which adds CPU processing time.
+- Existing optional upstream cloud integrations remain in the code; the local workflow uses local inference.
+
+See [PUBLICATION_SECURITY.md](PUBLICATION_SECURITY.md) for the source-publication checks. The documentation and download badges below describe **upstream Lumen**; those downloads do not contain this fork's local modifications.
+
+---
+
 <div align="center">
 
 <img src="docs/assets/logo.png" width="104" height="104" alt="Lumen logo" />

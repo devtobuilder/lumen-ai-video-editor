@@ -5,6 +5,7 @@
  * WebCodecs; the preview is never disturbed.
  */
 import type { Asset, Project } from '@/editor/types'
+import {prepareTextFonts} from './fonts'
 import { clipSourceTime, mediaDrawnAt, renderFrame } from './compositor'
 import { framesAt, VideoReader } from './decode'
 import { ensureImage, ensureSequenceFrame, sequenceFrame, withVideoFrames } from './media'
@@ -22,7 +23,20 @@ export class FrameFeeder {
 
   async prepare(frame: number) {
     this.ready.clear()
-    for (const { clip, local, view, key, offset } of mediaDrawnAt(this.project, frame)) {
+    const drawn = [...mediaDrawnAt(this.project, frame)]
+    const active = new Set(drawn.flatMap(({clip, view, key}) => {
+      const asset = clip.assetId ? view.assets[clip.assetId] : undefined
+      return asset && !asset.source.missing && asset.source.type === 'file' && asset.kind === 'video'
+        ? [key + '\n' + asset.source.url] : []
+    }))
+    // Release inactive decoders before allocating surfaces for another cut.
+    for (const [id, reader] of this.readers) {
+      if (!active.has(id)) {
+        await reader.dispose()
+        this.readers.delete(id)
+      }
+    }
+    for (const { clip, local, view, key, offset } of drawn) {
       const asset = clip.assetId ? view.assets[clip.assetId] : undefined
       if (!asset || asset.source.missing) continue
       const t = clipSourceTime(clip, local, view.settings.fps) - (offset ?? 0)
@@ -49,8 +63,9 @@ ${url}`
 
   frame = (clipId: string) => this.ready.get(clipId) ?? null
 
-  dispose() {
-    for (const r of this.readers.values()) r.dispose()
+  async dispose() {
+    this.ready.clear()
+    await Promise.all([...this.readers.values()].map((r) => r.dispose()))
     this.readers.clear()
   }
 }
@@ -70,7 +85,7 @@ export async function timelineStills(project: Project, frames: number[], width: 
   const h = even((w * project.settings.height) / project.settings.width)
   const feeder = new FrameFeeder(project, w, h)
   try {
-    await document.fonts.ready
+    await prepareTextFonts(project,w/project.settings.width)
     const out: HTMLCanvasElement[] = []
     for (const frame of frames) {
       await feeder.prepare(frame)
@@ -80,7 +95,7 @@ export async function timelineStills(project: Project, frames: number[], width: 
     }
     return out
   } finally {
-    feeder.dispose()
+    await feeder.dispose()
   }
 }
 

@@ -9,7 +9,8 @@ import { clipEnd } from './ops'
 import { dispatch, getProject, useEditor } from './store'
 import { captionStyle, layCaptions, type CaptionStyle } from './subtitles'
 import { consumed, localForSource } from './timing'
-import type { Clip, Project } from './types'
+import type { Asset, Clip, Project } from './types'
+import type {TranscriptMetadata} from '../../shared/integrations'
 
 const ai = { source: 'ai' as const }
 
@@ -20,6 +21,16 @@ const ai = { source: 'ai' as const }
  * it can be decoded — exact to 20 ms — otherwise the transcript's phrase timings.
  */
 const activityCache = new Map<string, [number, number][]>()
+
+/** Preserve quiet word onsets only when independent ASR supplies trustworthy
+ * word timing. Legacy/full-recording stretched timestamps never override VAD. */
+export function protectTrustedWordRegions(regions:[number,number][],asset:Asset):[number,number][] {
+  const words=speechScript(asset).filter(w=>w.utterance_id!==undefined&&w.probability!==undefined&&w.probability>=0.65&&w.avg_logprob!==undefined&&w.avg_logprob>= -0.8&&w.no_speech_prob!==undefined&&w.no_speech_prob<=0.2&&Number.isFinite(w.start)&&Number.isFinite(w.end)&&w.start>=0&&w.end>w.start&&w.end-w.start<=1.2&&w.end<=(asset.duration??Infinity))
+  const combined:[number,number][]=[...regions.map(([a,b])=>[a,b] as [number,number]),...words.map(w=>[w.start,w.end] as [number,number])]
+  const merged:[number,number][]=[]
+  for(const span of combined.sort((a,b)=>a[0]-b[0])){const last=merged.at(-1);if(last&&span[0]<=last[1])last[1]=Math.max(last[1],span[1]);else merged.push([...span])}
+  return merged
+}
 
 export async function speechRegions(project: Project, clip: Clip): Promise<{ regions: [number, number][]; from: 'transcript' | 'audio' } | null> {
   const asset = clip.assetId ? project.assets[clip.assetId] : undefined
@@ -35,7 +46,7 @@ export async function speechRegions(project: Project, clip: Clip): Promise<{ reg
       }
       if (regions) activityCache.set(key, regions)
     }
-    if (regions) return { regions, from: 'audio' }
+    if (regions) return { regions:protectTrustedWordRegions(regions,asset), from: 'audio' }
   }
   const script = speechScript(asset)
   return script.length ? { regions: script.map((s) => [s.start, s.end] as [number, number]), from: 'transcript' } : null
@@ -83,7 +94,7 @@ export function voiceClips(project: Project): Clip[] {
     .sort((a, b) => a.start - b.start)
 }
 
-export interface TimelineLine {
+export interface TimelineLine extends TranscriptMetadata {
   /** Timeline seconds. */
   start: number
   end: number
@@ -106,7 +117,8 @@ export function timelineTranscript(project: Project, from = 0, to = Infinity): T
       const start = toTimeline(project, clip, Math.max(seg.start, s0)) / fps
       const end = toTimeline(project, clip, Math.min(seg.end, s1)) / fps
       if (end <= from || start >= to) continue
-      out.push({ start, end, text: seg.text, clipId: clip.id, ...(seg.start < s0 || seg.end > s1 ? { partial: true } : {}) })
+      const {utterance_id,probability,avg_logprob,no_speech_prob}=seg
+      out.push({ start, end, text: seg.text, clipId: clip.id,...(utterance_id!==undefined?{utterance_id}:{}),...(probability!==undefined?{probability}:{}),...(avg_logprob!==undefined?{avg_logprob}:{}),...(no_speech_prob!==undefined?{no_speech_prob}:{}), ...(seg.start < s0 || seg.end > s1 ? { partial: true } : {}) })
     }
   }
   return out.sort((a, b) => a.start - b.start)
@@ -134,34 +146,88 @@ export interface PauseReport {
   from: 'transcript' | 'audio'
 }
 
-/** Silences longer than `minGap` seconds inside speech clips (keeping `pad` seconds of breath either side). */
-export async function findPauses(project: Project, opts: { clipIds?: string[]; minGap?: number; pad?: number } = {}): Promise<PauseReport[]> {
-  const minGap = opts.minGap ?? 0.6
+/** A selected silent video represents its aligned audible microphone clip. */
+function selectedSpeechClips(project: Project, ids: string[]): Clip[] {
+  const originalId = (id?: string): string | undefined => {
+    const seen = new Set<string>()
+    while (id && !seen.has(id)) {
+      seen.add(id)
+      const asset = project.assets[id]
+      if (!asset) return undefined
+      const original = asset.provenance?.integration === 'local-audio' ? asset.provenance.params?.original_asset_id : undefined
+      if (typeof original !== 'string') return id
+      id = original
+    }
+    return undefined
+  }
+  const audible = voiceClips(project).filter(c => c.kind === 'audio' && isAudible(project, c))
+  const resolved = new Map<string, Clip>()
+  for (const id of ids) {
+    const clip = project.clips[id]
+    if (!clip) continue
+    if (clip.kind !== 'video' || !clip.audio.detached) { resolved.set(id, clip); continue }
+    const source = originalId(clip.assetId)
+    if (!source) continue
+    const aligned = audible.filter(c => originalId(c.assetId) === source && c.start === clip.start && c.duration === clip.duration && c.inPoint === clip.inPoint && c.speed === clip.speed && c.reverse === clip.reverse)
+    const linked = clip.groupId ? aligned.filter(c => c.groupId === clip.groupId) : []
+    const matches = linked.length ? linked : aligned.length === 1 ? aligned : []
+    for (const sound of matches) resolved.set(sound.id, sound)
+    // Never inspect the raw source of a detached, inaudible video as fallback.
+  }
+  return [...resolved.values()]
+}
+
+/** Timeline-global pauses between speech, including across clip boundaries. */
+export async function findPauses(project: Project, opts: { clipIds?: string[]; minGap?: number; pad?: number; trimEdges?: boolean } = {}): Promise<PauseReport[]> {
+  const minGap = opts.minGap ?? 0.35
   const pad = opts.pad ?? 0.12
   const fps = project.settings.fps
-  const clips = opts.clipIds?.length ? opts.clipIds.map((id) => project.clips[id]).filter((c): c is Clip => Boolean(c)) : voiceClips(project)
-  const out: PauseReport[] = []
+  const clips = opts.clipIds?.length ? selectedSpeechClips(project, opts.clipIds) : voiceClips(project)
+  const spans: { start: number; end: number; clip: Clip; from: 'transcript' | 'audio' }[] = []
   for (const clip of clips) {
-    if (clip.reverse) continue
-    const speech = await speechRegions(project, clip)
-    if (!speech) continue
+    const speech = clip.reverse ? null : await speechRegions(project, clip)
+    // Unknown speech must protect its entire interval, never become silence.
+    if (!speech) { spans.push({ start: clip.start, end: clipEnd(clip), clip, from: 'audio' }); continue }
     const [s0, s1] = sourceRange(project, clip)
-    const segs = speech.regions.filter(([a, b]) => b > s0 && a < s1).sort((x, y) => x[0] - y[0])
-    const cuts: [number, number][] = []
-    let seconds = 0
-    for (let i = 0; i < segs.length - 1; i++) {
-      const a = Math.max(s0, segs[i][1])
-      const b = Math.min(s1, segs[i + 1][0])
-      if (b - a < minGap) continue
-      const ta = Math.round(toTimeline(project, clip, a + pad))
-      const tb = Math.round(toTimeline(project, clip, b - pad))
-      if (tb - ta >= 2) {
-        cuts.push([ta, tb])
-        seconds += (tb - ta) / fps
-      }
+    for (const [a, b] of speech.regions) {
+      if (b <= s0 || a >= s1) continue
+      const start = toTimeline(project, clip, Math.max(s0, a))
+      const end = toTimeline(project, clip, Math.min(s1, b))
+      if (end > start) spans.push({ start, end, clip, from: speech.from })
     }
-    if (cuts.length) out.push({ clip, cuts, seconds, from: speech.from })
   }
+  spans.sort((a, b) => a.start - b.start)
+  const union: typeof spans = []
+  for (const span of spans) {
+    const last = union[union.length - 1]
+    if (last && span.start <= last.end) {
+      if (span.end > last.end) { last.end = span.end; last.clip = span.clip; last.from = span.from }
+    } else union.push({ ...span })
+  }
+  const byClip = new Map<string, PauseReport>()
+  const addCut = (owner: typeof spans[number], a: number, b: number) => {
+    if (b - a < 2) return
+    let report = byClip.get(owner.clip.id)
+    if (!report) { report = { clip: owner.clip, cuts: [], seconds: 0, from: owner.from }; byClip.set(owner.clip.id, report) }
+    report.cuts.push([a, b]); report.seconds += (b - a) / fps
+  }
+  for (let i = 0; i + 1 < union.length; i++) {
+    const left = union[i], right = union[i + 1]
+    if ((right.start - left.end) / fps < minGap) continue
+    const a = Math.round(left.end + pad * fps), b = Math.round(right.start - pad * fps)
+    addCut(left, a, b)
+  }
+  if (opts.trimEdges !== false && union.length && clips.length) {
+    const first = union[0], last = union[union.length - 1]
+    const start = Math.min(...clips.map(c => c.start)), end = Math.max(...clips.map(clipEnd))
+    // Only measured sound can establish an outer boundary. Transcript timing
+    // can omit quiet words; an unknown source protects its full clip above.
+    if (first.from === 'audio' && (first.start - start) / fps >= minGap) addCut(first, start, Math.round(first.start - pad * fps))
+    if (last.from === 'audio' && (end - last.end) / fps >= minGap) addCut(last, Math.round(last.end + pad * fps), end)
+  }
+  const out = [...byClip.values()]
+  for (const report of out) report.cuts.sort((a, b) => a[0] - b[0])
+  out.sort((a, b) => a.cuts[0][0] - b.cuts[0][0])
   return out
 }
 
@@ -195,7 +261,7 @@ function subtractSpans(pieces: [number, number][], spans: [number, number][]) {
  */
 export async function silentCuts(project: Project, reports: PauseReport[], opts: { minGap?: number; pad?: number } = {}) {
   const pad = opts.pad ?? 0.12
-  const minLen = Math.max(2, Math.round(((opts.minGap ?? 0.6) - 2 * pad) * project.settings.fps))
+  const minLen = Math.max(2, Math.round(((opts.minGap ?? 0.35) - 2 * pad) * project.settings.fps))
   const voices = voiceClips(project)
   const spanCache = new Map<string, [number, number][]>()
   const cuts: [number, number][] = []
@@ -227,7 +293,7 @@ export async function silentCuts(project: Project, reports: PauseReport[], opts:
  * one, so captions, B-roll, effects and markers stay in sync — while music and
  * other sound beds play on through the joins instead of being chopped up.
  */
-export async function removePauses(opts: { clipIds?: string[]; minGap?: number } = {}) {
+export async function removePauses(opts: { clipIds?: string[]; minGap?: number; trimEdges?: boolean } = {}) {
   const project = getProject()
   const fps = project.settings.fps
   const cuts = await silentCuts(project, await findPauses(project, opts), opts)
@@ -296,9 +362,17 @@ export function addCaptions(opts: { maxWords?: number; size?: number; y?: number
   const spoken: [number, number][] = []
   const covered = (a: number, b: number) => spoken.reduce((sum, [x, y]) => sum + Math.max(0, Math.min(b, y) - Math.max(a, x)), 0) > (b - a) / 2
   for (const clip of clips) {
-    const script = speechScript(project.assets[clip.assetId!])
-    if (!script.length) continue
     const [s0, s1] = sourceRange(project, clip)
+    const rawScript = speechScript(project.assets[clip.assetId!]).filter(s => s.end > s0 && s.start < s1)
+    // Preserve real word endpoints while grouping neighboring CUDA word records.
+    const script: typeof rawScript = []
+    for (const seg of rawScript) {
+      const last = script[script.length - 1]
+      if (last && maxWords > 1 && seg.text.trim().split(/\s+/).length === 1 && last.text.trim().split(/\s+/).length < maxWords && seg.start - last.end <= 0.35 && !/[.!?]$/.test(last.text.trim())) {
+        script[script.length - 1] = { ...last, end: seg.end, text: `${last.text.trim()} ${seg.text.trim()}` }
+      } else script.push({ ...seg })
+    }
+    if (!script.length) continue
     for (const seg of script) {
       if (seg.end <= s0 || seg.start >= s1) continue
       const a = toTimeline(project, clip, Math.max(seg.start, s0))

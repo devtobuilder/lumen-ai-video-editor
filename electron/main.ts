@@ -1,4 +1,5 @@
 import path from 'node:path'
+import fs from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { app, BrowserWindow, nativeTheme, protocol, shell } from 'electron'
 import { APP_IPC } from '../shared/app'
@@ -32,6 +33,16 @@ protocol.registerSchemesAsPrivileged([
 
 // Automated tests run against their own profile, never the user's.
 if (process.env.LUMEN_USER_DATA) app.setPath('userData', process.env.LUMEN_USER_DATA)
+else {
+  // A local installation may keep its profile outside redirected AppData.
+  // The adjacent configuration is installed locally, never supplied by media.
+  const localProfile = path.join(process.resourcesPath, 'local-profile.json')
+  if (fs.existsSync(localProfile)) {
+    const configured = JSON.parse(fs.readFileSync(localProfile, 'utf8')) as { userData?: string }
+    if (typeof configured.userData !== 'string' || !path.isAbsolute(configured.userData)) throw new Error('Invalid local Lumen profile path.')
+    app.setPath('userData', configured.userData)
+  }
+}
 
 // Which graphics card to run on has to be decided before Chromium starts.
 applyGraphicsSettings()

@@ -15,6 +15,7 @@
  *   red when it needs rendering to play smoothly, yellow when it probably
  *   plays, and nothing for simple cuts.
  */
+import {prepareTextFonts} from './fonts'
 import { BufferTarget, CanvasSource, Mp4OutputFormat, Output } from 'mediabunny'
 import { toast } from 'sonner'
 import { create } from 'zustand'
@@ -33,7 +34,7 @@ import { useAutoRes } from './preview-res'
 import { FrameFeeder } from './stills'
 
 /** Bump when rendered files from older versions must not be reused. */
-const FORMAT = 1
+const FORMAT = 2
 
 /** Frames in a chunk: two seconds. */
 export const chunkFrames = (fps: number) => Math.max(1, Math.round(fps * 2))
@@ -397,7 +398,7 @@ export async function renderPreviews(range: [number, number], label: string, opt
   const ctl = new AbortController()
   controller = ctl
   useRenders.setState({ job: { label, background, done: 0, total: todo.length, current: null } })
-  await document.fonts.ready
+  await prepareTextFonts(project)
   const res = useUI.getState().renderRes
   const { width, height } = renderSize(project, res)
   const fps = project.settings.fps
@@ -435,7 +436,7 @@ export async function renderPreviews(range: [number, number], label: string, opt
   } catch (err) {
     if (!(err instanceof DOMException && err.name === 'AbortError')) failed = err
   } finally {
-    feeder.dispose()
+    await feeder.dispose()
     if (controller === ctl) {
       controller = null
       useRenders.setState({ job: null })

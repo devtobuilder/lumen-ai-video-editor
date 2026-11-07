@@ -4,6 +4,7 @@
  *
  * Time on the timeline is always an integer frame count at the project frame rate.
  */
+import type {TranscriptMetadata} from '../../shared/integrations'
 export type Frame = number
 
 // ─── Assets ──────────────────────────────────────────────────────────────
@@ -45,7 +46,7 @@ export type AssetSource =
       missing?: boolean
     }
 
-export interface SpeechSegment {
+export interface SpeechSegment extends TranscriptMetadata {
   /** seconds, relative to the asset start */
   start: number
   end: number
@@ -172,6 +173,8 @@ export interface Track {
   /** Lane height in px — a view preference that travels with the project. */
   height: number
   role?: 'main' | 'titles' | 'captions'
+  /** Main-track gap closing. Missing preserves legacy magnetic behavior. */
+  magnetic?: boolean
 }
 
 // ─── Clips ───────────────────────────────────────────────────────────────

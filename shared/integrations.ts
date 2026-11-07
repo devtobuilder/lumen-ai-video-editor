@@ -15,10 +15,39 @@ export type GeneratedSource =
   | { type: 'file'; url: string; path?: string; mime: string; fileName: string; size: number; poster?: string }
 
 /** A timed phrase of speech (voiceovers, transcripts) — what captions and pause detection read. */
-export interface TranscriptSegment {
+export interface TranscriptMetadata {
+  /** Optional independent local-ASR utterance identity and confidence. */
+  utterance_id?: string | number
+  probability?: number
+  avg_logprob?: number
+  no_speech_prob?: number
+}
+export interface TranscriptSegment extends TranscriptMetadata {
   start: number
   end: number
   text: string
+}
+
+export interface LocalVoiceEnhanceRequest {
+  id: string
+  source: string
+  strength: 'gentle' | 'balanced' | 'strong'
+  levelVoice: boolean
+  duration?: number
+}
+
+export interface LocalVoiceEnhanceResult {
+  source: string
+  output: string
+  engine: string
+  before: { seconds: number; peak_dbfs: number; rms_dbfs: number; quiet_window_rms_dbfs_p10: number; near_clipped_sample_fraction: number }
+  after: { seconds: number; peak_dbfs: number; rms_dbfs: number; quiet_window_rms_dbfs_p10: number; near_clipped_sample_fraction: number }
+  before_loudness_lufs: string
+  after_loudness_lufs: string
+  after_true_peak_dbtp: string
+  quiet_window_attenuation_before_leveling_db: number
+  elapsed_seconds: number
+  limitations: string[]
 }
 
 export interface Provenance {
@@ -276,6 +305,15 @@ export const IPC = {
   skillsOpenFolder: 'lumen:skills:open-folder',
   aiChatsSave: 'lumen:ai:chats-save',
   aiTranscribe: 'lumen:ai:transcribe',
+  localShort: 'lumen:local:short',
+  localShortCancel: 'lumen:local:short:cancel',
+  localShortProgress: 'lumen:local:short:progress',
+  localTranscribe: 'lumen:local:transcribe',
+  localTranscribeCancel: 'lumen:local:transcribe:cancel',
+  localTranscribeProgress: 'lumen:local:transcribe:progress',
+  localVoiceEnhance: 'lumen:local:voice-enhance',
+  localVoiceCancel: 'lumen:local:voice-enhance:cancel',
+  localVoiceProgress: 'lumen:local:voice-enhance:progress',
   aiMediaModels: 'lumen:ai:media-models',
   aiGenerateImage: 'lumen:ai:generate-image',
   aiGenerateVideo: 'lumen:ai:generate-video',
@@ -356,6 +394,16 @@ export interface IntegrationsAPI {
     onEvent(cb: (event: AgentEvent) => void): () => void
     /** Speech-to-text with the user's OpenAI key (16 kHz mono WAV in, timed phrases out). */
     transcribe(wav: Uint8Array, language?: string): Promise<TranscriptSegment[]>
+    localShort(req: { id: string; source: string; prompt: string; music?: string }): Promise<{ output: string; source_seconds: number; output_seconds: number; cuts: number; ranges: [number, number][]; subtitles: string; title: string; punchIn: boolean }>
+    cancelLocalShort(id: string): Promise<void>
+    onLocalShortProgress(cb: (event: { id: string; message: string }) => void): () => void
+    /** Native word-level CUDA Whisper; transcript stays attached to original media. */
+    transcribeLocal(req: { id: string; source: string; language?: string }): Promise<TranscriptSegment[]>
+    cancelLocalTranscription(id: string): Promise<void>
+    onLocalTranscriptionProgress(cb: (event: { id: string; message: string; progress: number }) => void): () => void
+    enhanceLocalVoice(req: LocalVoiceEnhanceRequest): Promise<LocalVoiceEnhanceResult>
+    cancelLocalVoiceEnhancement(id: string): Promise<void>
+    onLocalVoiceProgress(cb: (event: { id: string; message: string; progress: number }) => void): () => void
     /** Image / video models the provider key can use. */
     mediaModels(provider: 'openai' | 'gemini', refresh?: boolean): Promise<MediaModels>
     generateImage(req: ImageGenRequest): Promise<Job>

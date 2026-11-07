@@ -1,0 +1,837 @@
+[
+  {
+    "start": 0.5,
+    "end": 0.79,
+    "text": "Hello"
+  },
+  {
+    "start": 0.79,
+    "end": 1.08,
+    "text": "my"
+  },
+  {
+    "start": 1.08,
+    "end": 1.37,
+    "text": "name"
+  },
+  {
+    "start": 1.37,
+    "end": 1.66,
+    "text": "is"
+  },
+  {
+    "start": 1.66,
+    "end": 1.95,
+    "text": "Robin"
+  },
+  {
+    "start": 1.95,
+    "end": 2.24,
+    "text": "welcome"
+  },
+  {
+    "start": 2.24,
+    "end": 2.53,
+    "text": "to"
+  },
+  {
+    "start": 2.53,
+    "end": 2.82,
+    "text": "the"
+  },
+  {
+    "start": 2.82,
+    "end": 3.11,
+    "text": "garden"
+  },
+  {
+    "start": 3.11,
+    "end": 3.4,
+    "text": "of"
+  },
+  {
+    "start": 5.0,
+    "end": 5.3,
+    "text": "Hello"
+  },
+  {
+    "start": 5.3,
+    "end": 5.6,
+    "text": "my"
+  },
+  {
+    "start": 5.6,
+    "end": 5.9,
+    "text": "name"
+  },
+  {
+    "start": 5.9,
+    "end": 6.2,
+    "text": "is"
+  },
+  {
+    "start": 6.2,
+    "end": 6.5,
+    "text": "Robin"
+  },
+  {
+    "start": 6.5,
+    "end": 6.8,
+    "text": "welcome"
+  },
+  {
+    "start": 6.8,
+    "end": 7.1,
+    "text": "to"
+  },
+  {
+    "start": 7.1,
+    "end": 7.4,
+    "text": "the"
+  },
+  {
+    "start": 7.4,
+    "end": 7.7,
+    "text": "garden"
+  },
+  {
+    "start": 7.7,
+    "end": 8.0,
+    "text": "of"
+  },
+  {
+    "start": 12.0,
+    "end": 12.3273,
+    "text": "My"
+  },
+  {
+    "start": 12.3273,
+    "end": 12.6545,
+    "text": "name"
+  },
+  {
+    "start": 12.6545,
+    "end": 12.9818,
+    "text": "is"
+  },
+  {
+    "start": 12.9818,
+    "end": 13.3091,
+    "text": "Robin"
+  },
+  {
+    "start": 13.3091,
+    "end": 13.6364,
+    "text": "and"
+  },
+  {
+    "start": 13.6364,
+    "end": 13.9636,
+    "text": "welcome"
+  },
+  {
+    "start": 13.9636,
+    "end": 14.2909,
+    "text": "to"
+  },
+  {
+    "start": 14.2909,
+    "end": 14.6182,
+    "text": "the"
+  },
+  {
+    "start": 14.6182,
+    "end": 14.9455,
+    "text": "weekly"
+  },
+  {
+    "start": 14.9455,
+    "end": 15.2727,
+    "text": "garden"
+  },
+  {
+    "start": 15.2727,
+    "end": 15.6,
+    "text": "journal."
+  },
+  {
+    "start": 16.0,
+    "end": 16.2,
+    "text": "The"
+  },
+  {
+    "start": 20.0,
+    "end": 20.3846,
+    "text": "reason"
+  },
+  {
+    "start": 20.3846,
+    "end": 20.7692,
+    "text": "for"
+  },
+  {
+    "start": 20.7692,
+    "end": 21.1538,
+    "text": "this"
+  },
+  {
+    "start": 21.1538,
+    "end": 21.5385,
+    "text": "journal"
+  },
+  {
+    "start": 21.5385,
+    "end": 21.9231,
+    "text": "is"
+  },
+  {
+    "start": 21.9231,
+    "end": 22.3077,
+    "text": "to"
+  },
+  {
+    "start": 22.3077,
+    "end": 22.6923,
+    "text": "record"
+  },
+  {
+    "start": 22.6923,
+    "end": 23.0769,
+    "text": "which"
+  },
+  {
+    "start": 23.0769,
+    "end": 23.4615,
+    "text": "flowers"
+  },
+  {
+    "start": 23.4615,
+    "end": 23.8462,
+    "text": "thrive"
+  },
+  {
+    "start": 23.8462,
+    "end": 24.2308,
+    "text": "through"
+  },
+  {
+    "start": 24.2308,
+    "end": 24.6154,
+    "text": "changing"
+  },
+  {
+    "start": 24.6154,
+    "end": 25.0,
+    "text": "seasons."
+  },
+  {
+    "start": 30.0,
+    "end": 30.3077,
+    "text": "Each"
+  },
+  {
+    "start": 30.3077,
+    "end": 30.6154,
+    "text": "garden"
+  },
+  {
+    "start": 30.6154,
+    "end": 30.9231,
+    "text": "has"
+  },
+  {
+    "start": 30.9231,
+    "end": 31.2308,
+    "text": "different"
+  },
+  {
+    "start": 31.2308,
+    "end": 31.5385,
+    "text": "soil"
+  },
+  {
+    "start": 31.5385,
+    "end": 31.8462,
+    "text": "and"
+  },
+  {
+    "start": 31.8462,
+    "end": 32.1538,
+    "text": "we"
+  },
+  {
+    "start": 32.1538,
+    "end": 32.4615,
+    "text": "can"
+  },
+  {
+    "start": 32.4615,
+    "end": 32.7692,
+    "text": "learn"
+  },
+  {
+    "start": 32.7692,
+    "end": 33.0769,
+    "text": "by"
+  },
+  {
+    "start": 33.0769,
+    "end": 33.3846,
+    "text": "sharing"
+  },
+  {
+    "start": 33.3846,
+    "end": 33.6923,
+    "text": "our"
+  },
+  {
+    "start": 33.6923,
+    "end": 34.0,
+    "text": "observations."
+  },
+  {
+    "start": 40.0,
+    "end": 40.3,
+    "text": "I"
+  },
+  {
+    "start": 40.3,
+    "end": 40.6,
+    "text": "am"
+  },
+  {
+    "start": 40.6,
+    "end": 40.9,
+    "text": "a"
+  },
+  {
+    "start": 40.9,
+    "end": 41.2,
+    "text": "gardener"
+  },
+  {
+    "start": 44.0,
+    "end": 44.3333,
+    "text": "I"
+  },
+  {
+    "start": 44.3333,
+    "end": 44.6667,
+    "text": "am"
+  },
+  {
+    "start": 44.6667,
+    "end": 45.0,
+    "text": "a"
+  },
+  {
+    "start": 45.0,
+    "end": 45.3333,
+    "text": "gardener"
+  },
+  {
+    "start": 45.3333,
+    "end": 45.6667,
+    "text": "and"
+  },
+  {
+    "start": 45.6667,
+    "end": 46.0,
+    "text": "despite"
+  },
+  {
+    "start": 46.0,
+    "end": 46.3333,
+    "text": "planting"
+  },
+  {
+    "start": 46.3333,
+    "end": 46.6667,
+    "text": "new"
+  },
+  {
+    "start": 46.6667,
+    "end": 47.0,
+    "text": "flowers"
+  },
+  {
+    "start": 50.0,
+    "end": 50.3333,
+    "text": "I"
+  },
+  {
+    "start": 50.3333,
+    "end": 50.6667,
+    "text": "am"
+  },
+  {
+    "start": 50.6667,
+    "end": 51.0,
+    "text": "a"
+  },
+  {
+    "start": 51.0,
+    "end": 51.3333,
+    "text": "gardener"
+  },
+  {
+    "start": 51.3333,
+    "end": 51.6667,
+    "text": "and"
+  },
+  {
+    "start": 51.6667,
+    "end": 52.0,
+    "text": "despite"
+  },
+  {
+    "start": 52.0,
+    "end": 52.3333,
+    "text": "planting"
+  },
+  {
+    "start": 52.3333,
+    "end": 52.6667,
+    "text": "new"
+  },
+  {
+    "start": 52.6667,
+    "end": 53.0,
+    "text": "flowers"
+  },
+  {
+    "start": 56.0,
+    "end": 56.2,
+    "text": "I"
+  },
+  {
+    "start": 56.2,
+    "end": 56.4,
+    "text": "am"
+  },
+  {
+    "start": 56.4,
+    "end": 56.6,
+    "text": "a"
+  },
+  {
+    "start": 56.6,
+    "end": 56.8,
+    "text": "gardener"
+  },
+  {
+    "start": 56.8,
+    "end": 57.0,
+    "text": "and"
+  },
+  {
+    "start": 57.0,
+    "end": 57.2,
+    "text": "despite"
+  },
+  {
+    "start": 57.2,
+    "end": 59.5,
+    "text": "planting"
+  },
+  {
+    "start": 62.0,
+    "end": 63.5,
+    "text": "my"
+  },
+  {
+    "start": 63.5,
+    "end": 64.0,
+    "text": "own"
+  },
+  {
+    "start": 64.0,
+    "end": 64.5,
+    "text": "flower"
+  },
+  {
+    "start": 64.5,
+    "end": 65.0,
+    "text": "beds"
+  },
+  {
+    "start": 65.0,
+    "end": 65.5,
+    "text": "I"
+  },
+  {
+    "start": 65.5,
+    "end": 66.0,
+    "text": "still"
+  },
+  {
+    "start": 66.0,
+    "end": 66.5,
+    "text": "have"
+  },
+  {
+    "start": 66.5,
+    "end": 67.0,
+    "text": "much"
+  },
+  {
+    "start": 67.0,
+    "end": 67.5,
+    "text": "to"
+  },
+  {
+    "start": 67.5,
+    "end": 68.0,
+    "text": "learn."
+  },
+  {
+    "start": 74.0,
+    "end": 74.5,
+    "text": "Our"
+  },
+  {
+    "start": 74.5,
+    "end": 75.0,
+    "text": "plan"
+  },
+  {
+    "start": 75.0,
+    "end": 75.5,
+    "text": "is"
+  },
+  {
+    "start": 75.5,
+    "end": 76.0,
+    "text": "to"
+  },
+  {
+    "start": 76.0,
+    "end": 76.5,
+    "text": "improve"
+  },
+  {
+    "start": 76.5,
+    "end": 77.0,
+    "text": "the"
+  },
+  {
+    "start": 77.0,
+    "end": 77.5,
+    "text": "garden"
+  },
+  {
+    "start": 77.5,
+    "end": 78.0,
+    "text": "by"
+  },
+  {
+    "start": 78.0,
+    "end": 78.5,
+    "text": "recording"
+  },
+  {
+    "start": 78.5,
+    "end": 79.0,
+    "text": "everything"
+  },
+  {
+    "start": 79.0,
+    "end": 79.5,
+    "text": "we"
+  },
+  {
+    "start": 79.5,
+    "end": 80.0,
+    "text": "discover"
+  },
+  {
+    "start": 80.0,
+    "end": 80.5,
+    "text": "and"
+  },
+  {
+    "start": 80.5,
+    "end": 81.0,
+    "text": "building"
+  },
+  {
+    "start": 86.0,
+    "end": 86.4545,
+    "text": "Our"
+  },
+  {
+    "start": 86.4545,
+    "end": 86.9091,
+    "text": "plan"
+  },
+  {
+    "start": 86.9091,
+    "end": 87.3636,
+    "text": "is"
+  },
+  {
+    "start": 87.3636,
+    "end": 87.8182,
+    "text": "to"
+  },
+  {
+    "start": 87.8182,
+    "end": 88.2727,
+    "text": "improve"
+  },
+  {
+    "start": 88.2727,
+    "end": 88.7273,
+    "text": "the"
+  },
+  {
+    "start": 88.7273,
+    "end": 89.1818,
+    "text": "garden"
+  },
+  {
+    "start": 89.1818,
+    "end": 89.6364,
+    "text": "with"
+  },
+  {
+    "start": 89.6364,
+    "end": 90.0909,
+    "text": "colorful"
+  },
+  {
+    "start": 90.0909,
+    "end": 90.5455,
+    "text": "rocks"
+  },
+  {
+    "start": 90.5455,
+    "end": 91.0,
+    "text": "no."
+  },
+  {
+    "start": 96.0,
+    "end": 96.4167,
+    "text": "Our"
+  },
+  {
+    "start": 96.4167,
+    "end": 96.8333,
+    "text": "plan"
+  },
+  {
+    "start": 96.8333,
+    "end": 97.25,
+    "text": "is"
+  },
+  {
+    "start": 97.25,
+    "end": 97.6667,
+    "text": "to"
+  },
+  {
+    "start": 97.6667,
+    "end": 98.0833,
+    "text": "improve"
+  },
+  {
+    "start": 98.0833,
+    "end": 98.5,
+    "text": "the"
+  },
+  {
+    "start": 98.5,
+    "end": 98.9167,
+    "text": "garden"
+  },
+  {
+    "start": 98.9167,
+    "end": 99.3333,
+    "text": "by"
+  },
+  {
+    "start": 99.3333,
+    "end": 99.75,
+    "text": "planting"
+  },
+  {
+    "start": 99.75,
+    "end": 100.1667,
+    "text": "before"
+  },
+  {
+    "start": 100.1667,
+    "end": 100.5833,
+    "text": "winter"
+  },
+  {
+    "start": 100.5833,
+    "end": 101.0,
+    "text": "no."
+  },
+  {
+    "start": 106.0,
+    "end": 106.5,
+    "text": "Our"
+  },
+  {
+    "start": 106.5,
+    "end": 107.0,
+    "text": "plan"
+  },
+  {
+    "start": 107.0,
+    "end": 107.5,
+    "text": "is"
+  },
+  {
+    "start": 107.5,
+    "end": 108.0,
+    "text": "to"
+  },
+  {
+    "start": 108.0,
+    "end": 108.5,
+    "text": "improve"
+  },
+  {
+    "start": 108.5,
+    "end": 109.0,
+    "text": "the"
+  },
+  {
+    "start": 109.0,
+    "end": 109.5,
+    "text": "garden."
+  },
+  {
+    "start": 109.5,
+    "end": 110.0,
+    "text": "We"
+  },
+  {
+    "start": 110.0,
+    "end": 110.5,
+    "text": "will"
+  },
+  {
+    "start": 110.5,
+    "end": 111.0,
+    "text": "check"
+  },
+  {
+    "start": 111.0,
+    "end": 111.5,
+    "text": "the"
+  },
+  {
+    "start": 111.5,
+    "end": 112.0,
+    "text": "beds"
+  },
+  {
+    "start": 112.0,
+    "end": 112.5,
+    "text": "once"
+  },
+  {
+    "start": 112.5,
+    "end": 113.0,
+    "text": "a"
+  },
+  {
+    "start": 113.0,
+    "end": 113.5,
+    "text": "week"
+  },
+  {
+    "start": 113.5,
+    "end": 114.0,
+    "text": "and"
+  },
+  {
+    "start": 114.0,
+    "end": 114.5,
+    "text": "water"
+  },
+  {
+    "start": 114.5,
+    "end": 115.0,
+    "text": "the"
+  },
+  {
+    "start": 115.0,
+    "end": 115.5,
+    "text": "pots"
+  },
+  {
+    "start": 115.5,
+    "end": 116.0,
+    "text": "once"
+  },
+  {
+    "start": 116.0,
+    "end": 116.5,
+    "text": "a"
+  },
+  {
+    "start": 116.5,
+    "end": 117.0,
+    "text": "week."
+  },
+  {
+    "start": 122.0,
+    "end": 122.2727,
+    "text": "Thanks"
+  },
+  {
+    "start": 122.2727,
+    "end": 122.5455,
+    "text": "for"
+  },
+  {
+    "start": 122.5455,
+    "end": 122.8182,
+    "text": "watching"
+  },
+  {
+    "start": 122.8182,
+    "end": 123.0909,
+    "text": "and"
+  },
+  {
+    "start": 123.0909,
+    "end": 123.3636,
+    "text": "enjoy"
+  },
+  {
+    "start": 123.3636,
+    "end": 123.6364,
+    "text": "your"
+  },
+  {
+    "start": 123.6364,
+    "end": 123.9091,
+    "text": "next"
+  },
+  {
+    "start": 123.9091,
+    "end": 124.1818,
+    "text": "visit"
+  },
+  {
+    "start": 124.1818,
+    "end": 124.4545,
+    "text": "to"
+  },
+  {
+    "start": 124.4545,
+    "end": 124.7273,
+    "text": "the"
+  },
+  {
+    "start": 124.7273,
+    "end": 125.0,
+    "text": "garden."
+  }
+]

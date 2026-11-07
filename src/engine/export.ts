@@ -3,6 +3,7 @@
  * frame-exact video decoding, mixes the audio with the same engine as playback,
  * encodes with WebCodecs (hardware when available) and streams the file to disk.
  */
+import {prepareTextFonts} from './fonts'
 import {
   AudioBufferSource,
   canEncodeAudio,
@@ -253,14 +254,16 @@ async function renderTo(source: Project, settings: ExportSettings, handle: Expor
   const project = settings.burnCaptions === false ? withoutCaptions(source) : source
   const range = settings.range ?? [0, projectDuration(project)]
   const seconds = (range[1] - range[0]) / project.settings.fps
-  if (seconds <= 0) throw new Error('The timeline is empty — add some clips first.')
   const check = () => {
     if (signal.aborted) throw new ExportCancelled()
   }
 
   try {
+    // The caller has already opened an output handle. Validation must use the
+    // same abort/cleanup path as failures during rendering.
+    if (seconds <= 0) throw new Error('The timeline is empty — add some clips first.')
     onProgress({ phase: 'preparing', done: 0, total: 1, speed: 0, eta: 0, message: settings.format === 'png' ? 'Preparing…' : 'Preparing audio…' })
-    await document.fonts.ready
+    await prepareTextFonts(project)
     if (settings.format === 'png') return await exportFrames(project, settings, range, handle, onProgress, check)
     await prepareAudio(project, (done, total) => onProgress({ phase: 'preparing', done, total, speed: 0, eta: 0, message: `Preparing audio (${done}/${total})…` }))
     check()
@@ -458,12 +461,12 @@ async function encodeMedia(
     // The encoder's last frames come out here.
     if (plan) await encoding(output.finalize())
     else await output.finalize()
-    return await api.export.finish(handle.id)
+    return await api.export.finish(handle.id, format === 'mp4' && plan?.codec === 'avc')
   } catch (err) {
     await output.cancel().catch(() => {})
     throw err
   } finally {
-    feeder?.dispose()
+    await feeder?.dispose()
   }
 }
 
@@ -499,7 +502,7 @@ async function exportFrames(project: Project, settings: ExportSettings, range: [
     onProgress({ phase: 'finishing', done: 1, total: 1, speed: 0, eta: 0, message: 'Finishing…' })
     return await api.export.finish(handle.id)
   } finally {
-    feeder.dispose()
+    await feeder.dispose()
   }
 }
 
@@ -535,6 +538,6 @@ async function exportGif(project: Project, settings: ExportSettings, range: [num
     await api.export.write(handle.id, 0, gif.bytes())
     return await api.export.finish(handle.id)
   } finally {
-    feeder.dispose()
+    await feeder.dispose()
   }
 }

@@ -23,7 +23,7 @@ import {
   WandSparkles,
   X,
 } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { AiSparkle } from '@/components/brand'
 import { Button, IconButton } from '@/components/ui/button'
 import { ScrubInput } from '@/components/ui/scrub-input'
@@ -288,6 +288,8 @@ export function AudioSection({ clip, fps }: { clip: Clip; fps: number }) {
   if (clip.freeze) return <Note icon={<Snowflake />} text="A freeze frame holds one picture, so it plays no sound." />
   if (a.detached)
     return (
+      <>
+      <LocalVoiceCleanup clip={clip} />
       <Note
         icon={<Link2 />}
         text="This clip’s sound is on its own audio clip, linked to it — select that clip to mix it, or trim it separately for J- and L-cuts."
@@ -297,9 +299,11 @@ export function AudioSection({ clip, fps }: { clip: Clip; fps: number }) {
           </Button>
         }
       />
+      </>
     )
   return (
     <>
+      <LocalVoiceCleanup clip={clip} />
       <Section title="Volume" icon={<AudioLines />}>
         <div className="space-y-1">
           <PropSlider clip={clip} prop="volume" label="Level" min={-60} max={12} step={0.5} precision={1} unit="dB" defaultValue={0} />
@@ -318,6 +322,45 @@ export function AudioSection({ clip, fps }: { clip: Clip; fps: number }) {
       </Section>
     </>
   )
+}
+
+/** Shares the native Copilot operation; this never renders or replaces video. */
+function LocalVoiceCleanup({ clip }: { clip: Clip }) {
+  const [running, setRunning] = useState(false)
+  const [message, setMessage] = useState('')
+  const [strength, setStrength] = useState<'gentle' | 'balanced' | 'strong'>('balanced')
+  const current = useRef<AbortController | null>(null)
+  const processed = useEditor(s => {
+    const voice = clip.kind === 'video' && clip.audio.detached
+      ? Object.values(s.project.clips).find(c => c.kind === 'audio' && clip.groupId && c.groupId === clip.groupId)
+      : clip
+    return voice?.assetId ? s.project.assets[voice.assetId]?.provenance?.integration === 'local-audio' : false
+  })
+  async function enhance() {
+    if (current.current) return
+    const controller = new AbortController()
+    current.current = controller
+    setRunning(true)
+    setMessage('Preparing local speech cleanup…')
+    try {
+      const { LOCAL_AUDIO_TOOLS } = await import('@/integrations/tools/local-audio')
+      await LOCAL_AUDIO_TOOLS[0].run({ clip_ids: [clip.id], strength, level_voice: true }, { signal: controller.signal, progress: setMessage })
+      setMessage('Cleaned voice applied. Original audio is retained; Undo restores it.')
+    } catch (error) {
+      setMessage(controller.signal.aborted ? 'Cleanup stopped.' : error instanceof Error ? error.message : 'Voice cleanup failed.')
+    } finally { current.current = null; setRunning(false) }
+  }
+  return <Section title="AI mic cleanup" icon={<WandSparkles />}>
+    <div className="space-y-2">
+      <p className="text-xs text-fg-3">{processed ? 'This clip uses a locally enhanced voice source.' : 'Remove microphone noise locally. Video and cuts stay editable.'}</p>
+      <div className="flex items-center gap-2">
+        <Select aria-label="Microphone cleanup strength" value={strength} onChange={setStrength} options={[{ value: 'gentle', label: 'Gentle' }, { value: 'balanced', label: 'Balanced' }, { value: 'strong', label: 'Strong' }]} />
+        <Button size="sm" disabled={running} onClick={enhance}>{running ? 'Cleaning…' : processed ? 'Clean again' : 'Clean microphone'}</Button>
+        {running && <Button size="sm" onClick={() => current.current?.abort()}>Cancel</Button>}
+      </div>
+      {message && <p role="status" className="text-xs text-fg-3">{message}</p>}
+    </div>
+  </Section>
 }
 
 function Note({ icon, text, action }: { icon: ReactNode; text: string; action?: ReactNode }) {

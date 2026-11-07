@@ -301,6 +301,12 @@ const MAX_DAMAGE = 32
  * the frame showing at source time t; calls with increasing t stream through the
  * decoder, a jump backwards (or far ahead) seeks.
  */
+/** Allocation failures describe the decoder, never corrupt media. */
+export function decoderResourceFailure(error: unknown): boolean {
+  const message = error instanceof Error ? error.name + ': ' + error.message : String(error)
+  return /out.?of.?memory|not enough memory|insufficient.*(?:memory|resource)|0x8007000e|resource.*exhaust|quotaexceeded/i.test(message)
+}
+
 export class VideoReader {
   private input: Input
   private sink: Promise<CanvasSink | null>
@@ -347,6 +353,8 @@ export class VideoReader {
 
   private async reopen() {
     await this.stop()
+    this.input.dispose()
+    this.input = openInput(this.url)
     this.sink = this.openSink()
   }
 
@@ -395,6 +403,7 @@ export class VideoReader {
     try {
       return await this.read(t)
     } catch (err) {
+      if (decoderResourceFailure(err)) { await this.stop(); throw err }
       if (!this.software) {
         this.software = true
         await this.reopen()
@@ -402,7 +411,8 @@ export class VideoReader {
           const frame = await this.read(t)
           softwareDecoded.add(this.url)
           return frame
-        } catch {
+        } catch (softwareError) {
+          if (decoderResourceFailure(softwareError)) { await this.stop(); throw softwareError }
           // The processor fails too (or has no decoder for this codec), so it isn't the card.
           this.software = false
           await this.reopen()
@@ -432,7 +442,7 @@ export class VideoReader {
       if (owner?.sequenceNumber !== key.sequenceNumber) at = key.timestamp
       return sink.getCanvas(Math.max(0, at)).then(
         () => true,
-        () => false,
+        (error: unknown) => { if (decoderResourceFailure(error)) throw error; return false },
       )
     }
     let key = (await packets.getKeyPacket(Math.max(0, t), META)) ?? (await packets.getFirstPacket(META))
@@ -512,9 +522,12 @@ export class VideoReader {
     return (this.current ?? this.upcoming ?? null)?.canvas ?? null
   }
 
-  dispose() {
-    void this.iter?.return()
-    this.input.dispose()
+  async dispose() {
+    // Await generator cleanup before allocating a replacement hardware decoder.
+    try { await this.stop() } finally {
+      this.input.dispose()
+      this.held.clear()
+    }
   }
 }
 

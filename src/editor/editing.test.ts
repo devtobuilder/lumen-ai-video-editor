@@ -157,6 +157,53 @@ describe('freeze frames', () => {
 // ─── Linked sound & groups ───────────────────────────────────────────────
 
 describe('linked sound and groups', () => {
+  it('trims aligned enhanced voice with its picture while keeping the following cut source unchanged',()=>{
+    const first=add('Main',0,90,{assetId:'long',inPoint:30}),next=add('Main',90,60,{assetId:'long',inPoint:300})
+    const [sound]=(dispatch('clip.detachAudio',{ids:[first]}) as {result:string[]}).result
+    const [nextSound]=(dispatch('clip.detachAudio',{ids:[next]}) as {result:string[]}).result
+    dispatch('asset.add',{asset:asset('enhanced',60,'audio')})
+    dispatch('clip.replaceAsset',{ids:[sound,nextSound],assetId:'enhanced'})
+    expect(dispatch('clip.trim',{id:first,edge:'start',frame:10}).ok).toBe(true)
+    expect(clip(first)).toMatchObject({start:0,duration:80,inPoint:40})
+    expect(clip(sound)).toMatchObject({start:0,duration:80,inPoint:40})
+    expect(clip(next)).toMatchObject({start:80,duration:60,inPoint:300})
+    expect(clip(nextSound)).toMatchObject({start:80,duration:60,inPoint:300})
+    useEditor.getState().undo()
+    dispatch('track.update',{id:trackId('Main'),patch:{magnetic:false}})
+    expect(dispatch('clip.trim',{id:first,edge:'end',frame:70}).ok).toBe(true)
+    expect(clip(sound)).toMatchObject({start:0,duration:70,inPoint:30})
+    expect(clip(next)).toMatchObject({start:90,duration:60,inPoint:300})
+    expect(clip(nextSound)).toMatchObject({start:90,duration:60,inPoint:300})
+  })
+  it('preserves saved six-cut source ranges and later positions when magnetic editing is disabled',()=>{
+    dispatch('asset.add',{asset:asset('recording',180)})
+    // Synthetic source ranges for synchronized edit regression; linked enhanced
+    // voice behaves like detached sound independently of its asset identity.
+    const ranges=[[0,125,382],[125,237,614],[362,122,977],[484,213,1923],[697,300,3304],[997,162,3720]]
+    const ids=ranges.map(([start,duration,inPoint])=>add('Main',start,duration,{assetId:'recording',inPoint}))
+    for(const id of ids)expect(dispatch('clip.detachAudio',{ids:[id]}).ok).toBe(true)
+    expect(dispatch('track.update',{id:trackId('Main'),patch:{magnetic:false}}).ok).toBe(true)
+    const baseline=ids.map(id=>({start:clip(id).start,duration:clip(id).duration,inPoint:clip(id).inPoint}))
+    expect(dispatch('clip.trim',{id:ids[0],edge:'end',frame:100}).ok).toBe(true)
+    expect(clip(ids[0]).duration).toBe(100)
+    for(let i=1;i<ids.length;i++)expect(clip(ids[i])).toMatchObject(baseline[i])
+    useEditor.getState().undo()
+    expect(clip(ids[0]).duration).toBe(125)
+    const group=clip(ids[1]).groupId
+    const linked=Object.values(getProject().clips).filter(c=>c.groupId===group).map(c=>c.id)
+    expect(dispatch('clip.delete',{ids:linked,ripple:false}).ok).toBe(true)
+    for(let i=2;i<ids.length;i++)expect(clip(ids[i])).toMatchObject(baseline[i])
+    useEditor.getState().undo()
+    for(let i=0;i<ids.length;i++)expect(clip(ids[i])).toMatchObject(baseline[i])
+    expect(getProject().tracks.find(t=>t.id===trackId('Main'))?.magnetic).toBe(false)
+  })
+
+  it('keeps explicit ripple available on a non-magnetic main track without stretching the next source',()=>{
+    const first=add('Main',0,60,{assetId:'long'}),next=add('Main',60,90,{assetId:'long',inPoint:300})
+    dispatch('track.update',{id:trackId('Main'),patch:{magnetic:false}})
+    expect(dispatch('clip.trim',{id:first,edge:'end',frame:40,ripple:true}).ok).toBe(true)
+    expect(clip(next)).toMatchObject({start:40,duration:90,inPoint:300})
+  })
   it('detached sound follows its picture when the main track repacks', () => {
     const first = add('Main', 0, 60, { assetId: 'long' })
     const second = add('Main', 60, 60, { assetId: 'long', inPoint: 300 })

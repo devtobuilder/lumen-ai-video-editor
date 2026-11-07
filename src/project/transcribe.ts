@@ -18,15 +18,16 @@ export type Transcriber = 'elevenlabs' | 'openai' | 'local'
 export const TRANSCRIBER_NAMES: Record<Transcriber, string> = {
   elevenlabs: 'ElevenLabs Scribe',
   openai: 'OpenAI Whisper',
-  local: 'Whisper on this computer',
+  local: 'CUDA Whisper on this computer',
 }
 
 /** Services that can transcribe right now, best first. */
 export function transcribers(): Transcriber[] {
-  const out: Transcriber[] = []
+  // Local-first is deliberate: merely having a connected key must never turn
+  // a normal caption/transcript action into cloud inference.
+  const out: Transcriber[] = ['local']
   if (useIntegrations.getState().elevenlabs?.configured) out.push('elevenlabs')
   if (useAi.getState().providers.openai?.configured) out.push('openai')
-  out.push('local')
   return out
 }
 
@@ -69,14 +70,28 @@ async function withElevenLabs(asset: Asset, language?: string): Promise<Transcri
  * Transcribes an asset and attaches the transcript (undoable). Resolves with the
  * phrases; concurrent requests for the same asset share one run.
  */
-export function transcribeMedia(assetId: string, opts: { using?: Transcriber; language?: string; onProgress?: (p: number) => void } = {}): Promise<TranscriptSegment[]> {
+export function transcribeMedia(assetId: string, opts: { using?: Transcriber; language?: string; onProgress?: (p: number) => void; signal?: AbortSignal } = {}): Promise<TranscriptSegment[]> {
   const running = inFlight.get(assetId)
   if (running) return running
   const task = (async () => {
     const asset = getProject().assets[assetId]
     if (!canTranscribe(asset)) throw new Error('Only audio and video with sound can be transcribed.')
-    const using = opts.using ?? transcribers()[0]
+    const target = useAi.getState().target
+    const using = target?.kind === 'model' && target.provider === 'ollama' ? 'local' : opts.using ?? transcribers()[0]
+    if (opts.signal?.aborted) throw new DOMException('Stopped.', 'AbortError')
     if (using === 'elevenlabs') return await withElevenLabs(asset, opts.language)
+    if (using === 'local' && api?.ai.transcribeLocal && asset.source.type === 'file' && asset.source.path) {
+      const id = crypto.randomUUID()
+      const off = api.ai.onLocalTranscriptionProgress(e => { if (e.id === id) opts.onProgress?.(e.progress) })
+      const stop = () => void api?.ai.cancelLocalTranscription(id)
+      opts.signal?.addEventListener('abort', stop, { once: true })
+      try {
+        const segments = await api.ai.transcribeLocal({ id, source: asset.source.path, language: opts.language })
+        if (opts.signal?.aborted) throw new DOMException('Stopped.', 'AbortError')
+        if (getProject().assets[assetId]) dispatch('asset.update', { id: assetId, patch: { transcript: segments } }, { source: 'ai', label: 'Add CUDA transcript' })
+        return segments
+      } finally { off(); opts.signal?.removeEventListener('abort', stop) }
+    }
     // Long recordings arrive already mixed down to 16 kHz mono, streamed a minute at a time.
     const buffer = await speechAudio(asset)
     if (!buffer) throw new Error('This media has no sound to transcribe.')
@@ -95,11 +110,13 @@ export async function ensureTranscripts(assetIds: string[]) {
   const todo = assetIds.filter((id) => !getProject().assets[id]?.transcript?.length && canTranscribe(getProject().assets[id]))
   if (!todo.length) return true
   const using = transcribers()[0]
-  const id = toast.loading(`Transcribing ${todo.length === 1 ? getProject().assets[todo[0]].name : `${todo.length} clips`}…`, { description: TRANSCRIBER_NAMES[using] })
+  const controller = new AbortController()
+  const id = toast.loading(`Transcribing ${todo.length === 1 ? getProject().assets[todo[0]].name : `${todo.length} clips`}…`, { description: TRANSCRIBER_NAMES[using], action: { label: 'Cancel', onClick: () => controller.abort() }, duration: Infinity })
   try {
     for (const [i, assetId] of todo.entries()) {
       await transcribeMedia(assetId, {
         using,
+        signal: controller.signal,
         onProgress: (p) => toast.loading(`Transcribing… ${Math.round(((i + p) / todo.length) * 100)}%`, { id, description: TRANSCRIBER_NAMES[using] }),
       })
     }

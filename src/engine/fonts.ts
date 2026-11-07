@@ -5,10 +5,44 @@
  * titles draw with them on the canvas and extrude with them in 3D.
  */
 import { FONTS } from '@/editor/defaults'
-import type { FontId, FontRef, Project, ProjectFont } from '@/editor/types'
+import type { FontId, FontRef, Project, ProjectFont,TextStyle } from '@/editor/types'
 
 const registered = new Map<string, FontFace>()
 const fileUrls = new Map<string, string>()
+const loadingTextFonts=new Map<string,Promise<unknown>>()
+const failedTextFonts=new Set<string>()
+
+export function textFontCss(style:TextStyle,project:Pick<Project,'fonts'>,scale=1):string {
+  return `${style.italic?'italic ':''}${style.weight} ${style.size*scale}px ${fontCss(style.font,project)}`
+}
+
+/** Do not expose fallback metrics while the actual requested face loads. */
+export function textFontReady(project:Pick<Project,'fonts'>,style:TextStyle,scale=1):boolean {
+  if(typeof document==='undefined'||!document.fonts)return true
+  registerProjectFonts(project)
+  const css=textFontCss(style,project,scale),sample=style.uppercase?style.content.toUpperCase():style.content
+  const key=css+'|'+sample
+  if(document.fonts.check(css,sample)||failedTextFonts.has(key))return true
+  if(!loadingTextFonts.has(key))loadingTextFonts.set(key,document.fonts.load(css,sample).catch(error=>{
+    failedTextFonts.add(key)
+    console.warn('Requested text font failed to load; using the available fallback.',error)
+  }))
+  return false
+}
+
+/** Start face loads before awaiting readiness: fonts.ready alone may already
+ * be resolved on a cold project that has not requested its caption fonts yet. */
+export async function prepareTextFonts(project:Pick<Project,'fonts'|'clips'>,scale=1):Promise<void> {
+  if(typeof document==='undefined'||!document.fonts)return
+  const pending:Promise<unknown>[]=[]
+  for(const clip of Object.values(project.clips))if(clip.kind==='text'&&clip.text&&!textFontReady(project,clip.text,scale)){
+    const st=clip.text,sample=st.uppercase?st.content.toUpperCase():st.content
+    const load=loadingTextFonts.get(textFontCss(st,project,scale)+'|'+sample)
+    if(load)pending.push(load)
+  }
+  await Promise.all(pending)
+  await document.fonts.ready
+}
 
 export const isCustomFont = (ref: FontRef): ref is `custom:${string}` => ref.startsWith('custom:')
 

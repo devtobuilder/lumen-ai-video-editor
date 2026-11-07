@@ -731,6 +731,25 @@ export interface MixOptions {
   ceiling?: number
 }
 
+/** Stateful processing heard through this timeline, including nested mixes. */
+function statefulMix(project: Project, level = 0): boolean {
+  if (hasDynamics(project.master) || project.tracks.some(t => hasDynamics(t.mix))) return true
+  for (const clip of Object.values(project.clips)) {
+    // Voice enhancement includes a compressor, even without a track processor.
+    if (isAudible(project, clip) && clip.audio.enhance) return true
+    if (level < MAX_NESTING && nestHeard(project, clip)) {
+      const inner = sequenceView(project, clip.sequenceId!)
+      if (inner && inner !== project && statefulMix(inner, level + 1)) return true
+    }
+  }
+  return false
+}
+
+/** Let compressors reach the same state on either side of an export block. */
+export function mixPrerollSeconds(project: Project, from: number, ceiling?: number): number {
+  return from > 0 && (ceiling !== undefined || statefulMix(project)) ? Math.min(from, 1) : 0
+}
+
 /**
  * Renders the mix of timeline seconds [from, to) as stereo. Compressors and
  * limiters remember what came before, so each block starts a second early and
@@ -738,8 +757,7 @@ export interface MixOptions {
  */
 export async function renderMix(project: Project, from: number, to: number, opts: MixOptions = {}): Promise<AudioBuffer> {
   const sampleRate = opts.sampleRate ?? 48000
-  const dynamic = hasDynamics(project.master) || project.tracks.some((t) => hasDynamics(t.mix)) || opts.ceiling !== undefined
-  const lead = dynamic ? Math.min(from, 1) : 0
+  const lead = mixPrerollSeconds(project, from, opts.ceiling)
   const start = from - lead
   const length = Math.max(1, Math.round((to - start) * sampleRate))
   const off = new OfflineAudioContext({ numberOfChannels: 2, length, sampleRate })
@@ -883,7 +901,12 @@ export function regionsFromLevels(db: Float32Array, opts: { minSilence?: number;
   const sorted = Float32Array.from(db).sort()
   const floor = sorted[Math.floor(frames * 0.1)]
   const level = sorted[Math.floor(frames * 0.9)]
-  const threshold = Math.max(-60, Math.min(-28, floor + Math.max(6, (level - floor) * 0.35)))
+  // Neural cleanup can push the floor below-90dB while leaving breaths around
+  // -50dB. Noise-floor interpolation alone then labels those breaths speech.
+  // Also anchor to THIS recording's typical speech level, keeping quiet
+  // recordings detectable rather than imposing a fixed loud-voice threshold.
+  const noiseThreshold = floor + Math.max(6, (level - floor) * 0.35)
+  const threshold = Math.max(-60, Math.min(-28, Math.max(noiseThreshold, level - 25)))
   const regions: [number, number][] = []
   let startF = -1
   let quiet = 0

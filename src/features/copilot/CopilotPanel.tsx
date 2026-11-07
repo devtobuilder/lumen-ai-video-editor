@@ -36,6 +36,7 @@ import { agentTools } from '@/integrations/agent-tools'
 import { useEditor } from '@/editor/store'
 import { useUI } from '@/editor/ui-store'
 import { signInLocal, useAi } from '@/integrations/ai'
+import { isLocalEditingTool } from '@shared/local-editing'
 import { openIntegrations, useIntegrations } from '@/integrations/store'
 import { cn } from '@/lib/cn'
 import { assetThumb } from '@/features/assets/shared'
@@ -169,7 +170,9 @@ export function CopilotPanel() {
 
 function StatusBar() {
   const servers = useIntegrations((s) => s.servers)
-  const tools = useMemo(() => agentTools(servers), [servers])
+  const target = useAi((s) => s.target)
+  const local = target?.kind === 'model' && target.provider === 'ollama'
+  const tools = useMemo(() => agentTools(servers).filter(t => !local || isLocalEditingTool(t.name)), [servers, local])
   const hasMessages = useCopilot((s) => s.messages.length > 0)
   const busy = useCopilot((s) => s.busy)
   return (
@@ -185,8 +188,8 @@ function StatusBar() {
         </PopoverTrigger>
         <PopoverContent align="end" className="w-80 p-0">
           <div className="border-b border-line px-3.5 py-3">
-            <div className="text-sm font-semibold text-fg">Editor tools</div>
-            <p className="mt-0.5 text-xs leading-relaxed text-fg-3">Every edit in Lumen is a typed command. Copilot’s models, your local agents and any MCP client use these same tools.</p>
+            <div className="text-sm font-semibold text-fg">{local ? 'Local editing tools' : 'Editor tools'}</div>
+            <p className="mt-0.5 text-xs leading-relaxed text-fg-3">{local ? 'Local AI can discover and use these native editing tools as needed. Captions, cuts, effects, transitions, keyframes and audio remain editable.' : 'Every edit in Lumen is a typed command. Copilot’s models, your local agents and any MCP client use these same tools.'}</p>
           </div>
           <div className="max-h-72 overflow-y-auto p-1.5">
             {tools.map((t) => (
@@ -326,6 +329,8 @@ function ChatRow({ chat, active, disabled, onOpen }: { chat: Chat; active: boole
 }
 
 function Welcome() {
+  const target = useAi((s) => s.target)
+  const local = target?.kind === 'model' && target.provider === 'ollama'
   return (
     <div className="flex min-h-full flex-col pt-8 pb-2">
       <div className="relative mx-auto mb-5 grid size-16 place-items-center">
@@ -335,7 +340,7 @@ function Welcome() {
         </div>
       </div>
       <h3 className="text-center text-xl font-semibold tracking-tight text-fg">What should we make?</h3>
-      <p className="mx-auto mt-1.5 max-w-[250px] text-center text-sm leading-relaxed text-fg-3">Copilot edits your timeline directly. Every change is visible, and undoable in one step.</p>
+      <p className="mx-auto mt-1.5 max-w-[250px] text-center text-sm leading-relaxed text-fg-3">{local ? 'Local AI edits native timeline layers. Refine captions, cuts, effects, transitions and audio through follow-up instructions.' : 'Copilot edits your timeline directly. Every change is visible, and undoable in one step.'}</p>
       <RecentChats />
       <div className="mt-6 grid grid-cols-2 gap-2">
         {STARTERS.map((s, i) => (

@@ -88,7 +88,7 @@ export const CONTROL_TOOLS: AgentTool[] = [
   {
     name: 'add_title',
     description:
-      'Add a text title in one step, styled from a title preset (see list_catalog → titles) and scaled to the canvas: on the titles track at a time in seconds, for a duration. Returns the clip id — fine-tune it with clip_update. For captions of speech use add_captions.',
+      'Add a text title in one step, styled from a title preset (see list_catalog → titles) and scaled to the canvas: on the titles track at a time in seconds, for a duration. An explicit at_seconds is exact: if that track is occupied there, the tool fails without changes; use the default titles track or a new overlay track. Returns the clip id — fine-tune it with clip_update. For captions of speech use add_captions.',
     inputSchema: obj(
       {
         text: str('The words'),
@@ -118,6 +118,7 @@ export const CONTROL_TOOLS: AgentTool[] = [
       let clipId = ''
       const add = () => {
         const trackId = text(a, 'track_id') ? trackById(text(a, 'track_id')!).id : titlesTrack()
+        if (getProject().tracks.find(t => t.id === trackId)?.role === 'main') throw new Error('Put titles on the Titles track or a new overlay track, rather than inserting them into the main footage track.')
         const res = dispatch(
           'clip.add',
           {
@@ -142,6 +143,9 @@ export const CONTROL_TOOLS: AgentTool[] = [
         )
         if (!res.ok) throw new Error(res.error)
         clipId = res.result as string
+        if (number(a, 'at_seconds') !== undefined && getProject().clips[clipId].start !== start) {
+          throw new Error(`That track is occupied at ${seconds(start)} seconds. No title was added. Omit track_id to use the Titles track, or create a new video overlay track, then retry at the requested time.`)
+        }
       }
       useEditor.getState().transaction(`Title “${words.slice(0, 24)}”`, 'ai', () => {
         const mark = savepoint()

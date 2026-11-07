@@ -344,6 +344,13 @@ const cursorTrack = z.object({
   rate: z.number().positive(),
 })
 
+const transcriptSegment=z.object({
+  start:z.number(),end:z.number(),text:z.string(),
+  utterance_id:z.union([z.string(),z.number().int()]).optional(),
+  probability:z.number().min(0).max(1).optional(),
+  avg_logprob:z.number().optional(),
+  no_speech_prob:z.number().min(0).max(1).optional(),
+})
 const asset = z.object({
   id,
   name: z.string().min(1),
@@ -358,7 +365,7 @@ const asset = z.object({
   alpha: z.boolean().optional(),
   generated: z.boolean().optional(),
   provenance: z.object({ integration: z.string(), tool: z.string(), prompt: z.string().optional(), params: z.record(z.string(), z.unknown()).optional() }).optional(),
-  transcript: z.array(z.object({ start: z.number(), end: z.number(), text: z.string() })).optional(),
+  transcript: z.array(transcriptSegment).optional(),
   favorite: z.boolean().optional(),
   tags: z.array(z.string()).optional(),
   proxy: z.object({ path: z.string(), url: z.string(), width: z.number(), height: z.number() }).optional(),
@@ -684,8 +691,21 @@ export const commands = {
     run(p, i) {
       const clip = getClip(p, i.id)
       assertEditable(p, clip)
-      if (i.ripple && !isMagneticTrack(p, clip.trackId)) rippleTrimClip(p, clip, i.edge, i.frame)
-      else trimClip(p, clip, i.edge, i.frame)
+      const linked=clip.kind==='video'&&clip.groupId?Object.values(p.clips).filter(c=>c.id!==clip.id&&c.kind==='audio'&&c.groupId===clip.groupId&&c.start===clip.start&&c.duration===clip.duration&&c.inPoint===clip.inPoint&&c.speed===clip.speed&&c.reverse===clip.reverse&&c.freeze===clip.freeze):[]
+      linked.forEach(c=>assertEditable(p,c))
+      // One native trim owns both aligned picture and detached/enhanced voice.
+      // Magnetic trims ripple too; trim each partner before normalization so a
+      // trimmed head cannot leave its sound offset or overrun the next shot.
+      const ripple=i.ripple||isMagneticTrack(p,clip.trackId)
+      const oldStart=clip.start,oldEnd=clipEnd(clip)
+      if(ripple)rippleTrimClip(p,clip,i.edge,i.frame)
+      else trimClip(p,clip,i.edge,i.frame)
+      for(const sound of linked){
+        const target=i.edge==='end'?sound.start+clip.duration:oldStart+(oldEnd-oldStart-clip.duration)
+        if(ripple)rippleTrimClip(p,sound,i.edge,target)
+        else trimClip(p,sound,i.edge,i.edge==='start'?clip.start:clipEnd(clip))
+        if(sound.duration!==clip.duration||sound.inPoint!==clip.inPoint)throw new CommandError('The linked voice cannot cover this trim within its source bounds. No change was applied.')
+      }
     },
   }),
 
@@ -748,6 +768,36 @@ export const commands = {
     },
   }),
 
+  'timeline.insertRange': command({
+    description: 'Insert empty time across every unlocked track and shift markers right. Splits clips crossing the insertion. Use this before clip_add mode free to restore a removed source range while keeping captions and B-roll synchronized. Times are timeline frames.',
+    input: z.object({ at: frame, duration: frame.min(1) }),
+    title: () => 'Insert time across timeline',
+    run(p, i) {
+      for (const t of p.tracks) if (!t.locked) insertGap(p, t.id, i.at, i.duration)
+      for (const m of p.markers) if (m.frame >= i.at) m.frame += i.duration
+    },
+  }),
+
+  'timeline.restoreSourceGap': command({
+    description: 'Restore omitted source time between adjacent normal-speed shots of one original asset, including linked voice clips and synchronized overlays, atomically.',
+    input: z.object({ clipId: id }),
+    title: () => 'Restore original source interval',
+    run(p, i) {
+      const next = getClip(p, i.clipId)
+      const prev = Object.values(p.clips).find(c => c.id !== next.id && c.trackId === next.trackId && clipEnd(c) === next.start)
+      if (!prev || next.kind !== 'video' || prev.kind !== 'video' || !next.assetId || next.assetId !== prev.assetId || next.speed !== 1 || prev.speed !== 1 || next.reverse || prev.reverse) throw new CommandError('Choose adjacent forward normal-speed shots from the same original video asset.')
+      const at = next.start, gap = next.inPoint - (prev.inPoint + prev.duration)
+      if (gap < 1) throw new CommandError('There is no omitted source interval at this cut.')
+      if (p.tracks.some(t => t.locked && Object.values(p.clips).some(c => c.trackId === t.id && clipEnd(c) > at))) throw new CommandError('Unlock affected tracks before restoring synchronized time.')
+      const voice = Object.values(p.clips).filter(c => c.kind === 'audio' && prev.groupId && c.groupId === prev.groupId && clipEnd(c) === at)
+      for (const t of p.tracks) if (!t.locked) insertGap(p, t.id, at, gap)
+      prev.duration += gap
+      for (const sound of voice) sound.duration += gap
+      for (const marker of p.markers) if (marker.frame >= at) marker.frame += gap
+      return { restored_frames: gap, clip_ids: [prev.id, next.id] }
+    },
+  }),
+
   'timeline.removeRange': command({
     description:
       'Take a stretch of time out of the whole timeline (like Extract): clips inside it are removed, clips across it lose that stretch, and everything later — on every unlocked track, plus markers — moves left to close up. Clips listed in keepWhole (music beds, ambience) are not cut: they keep playing through the join and end earlier.',
@@ -771,8 +821,30 @@ export const commands = {
       for (const clipId of i.ids) {
         const clip = getClip(p, clipId)
         assertEditable(p, clip)
+        if (i.patch.text && clip.kind !== 'text') throw new Error(`Clip ${clipId} is ${clip.kind}, not a text caption/title. Inspect get_editing_state with kind text before changing caption wording.`)
         applyPatch(p, clip, i.patch)
       }
+    },
+  }),
+
+  'clip.replaceAsset': command({
+    description: 'Replace clip source media with a compatible imported asset while preserving clip timing, source offsets, group links, animation and mix. Audio clips accept audio assets or video assets with sound. The replacement must be long enough for every selected source range.',
+    input: z.object({ ids: z.array(id).min(1), assetId: id }),
+    title: () => 'Replace source media',
+    run(p, i) {
+      const asset = p.assets[i.assetId]
+      if (!asset) throw new CommandError('Import the replacement asset first.')
+      const clips = i.ids.map(clipId => {
+        const clip = getClip(p, clipId)
+        assertEditable(p, clip)
+        if (clip.sequenceId) throw new CommandError('A nested timeline cannot be replaced with a media asset.')
+        const compatible = clip.kind === 'audio' ? asset.kind === 'audio' || (asset.kind === 'video' && asset.hasAudio !== false) : clip.kind === asset.kind
+        if (!compatible) throw new CommandError(`The replacement ${asset.kind} asset cannot play on a ${clip.kind} clip.`)
+        if (asset.duration !== undefined && clip.inPoint + consumed(clip) > framesIn(asset.duration, p.settings.fps) + 0.5) throw new CommandError('The replacement asset is shorter than the clip’s existing source range.')
+        return clip
+      })
+      for (const clip of clips) clip.assetId = i.assetId
+      return { ids: clips.map(c => c.id), assetId: i.assetId }
     },
   }),
 
@@ -909,7 +981,11 @@ export const commands = {
         const clip = getClip(p, clipId)
         assertEditable(p, clip)
         if (!clip.audio.detached) throw new CommandError(`“${clip.name}” still has its own sound`)
-        reattachAudio(p, clip)
+        try {
+          reattachAudio(p, clip)
+        } catch (error) {
+          throw new CommandError((error as Error).message)
+        }
       }
     },
   }),
@@ -1194,6 +1270,7 @@ export const commands = {
       name: z.string().optional(),
       index: z.number().int().min(0).optional(),
       role: z.enum(['main', 'titles', 'captions']).optional(),
+      magnetic: z.boolean().optional(),
     }),
     title: (i) => `Add ${i.kind} track`,
     run(p, i) {
@@ -1203,6 +1280,7 @@ export const commands = {
         name: i.name ?? `${i.kind === 'video' ? 'Video' : 'Audio'} ${count + 1}`,
         height: i.role === 'captions' || i.role === 'titles' ? TRACK_HEIGHTS.titles : i.kind === 'video' ? TRACK_HEIGHTS.video : TRACK_HEIGHTS.audio,
         role: i.role,
+        magnetic: i.magnetic,
       })
       const index = i.index ?? (i.kind === 'video' ? 0 : p.tracks.length)
       p.tracks.splice(Math.min(index, p.tracks.length), 0, track)
@@ -1211,11 +1289,11 @@ export const commands = {
   }),
 
   'track.update': command({
-    description: 'Rename a track, toggle hidden / muted / locked / solo (while any track is soloed only soloed tracks are heard), or change its height.',
+    description: 'Rename a track, toggle hidden / muted / locked / solo, set main-track magnetic gap closing, or change its height. magnetic false preserves gaps during ordinary trim/delete; explicit ripple remains available.',
     input: z.object({
       id,
       patch: z
-        .object({ name: z.string().min(1), hidden: z.boolean(), muted: z.boolean(), locked: z.boolean(), solo: z.boolean(), height: z.number().min(28).max(160) })
+        .object({ name: z.string().min(1), hidden: z.boolean(), muted: z.boolean(), locked: z.boolean(), solo: z.boolean(), magnetic: z.boolean(), height: z.number().min(28).max(160) })
         .partial(),
     }),
     title: (i) => {
@@ -1225,6 +1303,7 @@ export const commands = {
         locked: ['Lock track', 'Unlock track'],
         muted: ['Mute track', 'Unmute track'],
         solo: ['Solo track', 'Unsolo track'],
+        magnetic: ['Enable magnetic timeline', 'Disable magnetic timeline'],
       }
       const pair = toggles[key]
       return pair ? pair[i.patch[key as keyof typeof i.patch] ? 0 : 1] : 'Edit track'
@@ -1409,7 +1488,7 @@ export const commands = {
           name: z.string().min(1),
           favorite: z.boolean(),
           tags: z.array(z.string()),
-          transcript: z.array(z.object({ start: z.number(), end: z.number(), text: z.string() })),
+          transcript: z.array(transcriptSegment),
           peaks: z.array(z.number()),
           hasAudio: z.boolean(),
           duration: z.number().positive(),
@@ -1420,6 +1499,7 @@ export const commands = {
           proxy: z.object({ path: z.string(), url: z.string(), width: z.number(), height: z.number() }).nullable(),
           beats: z.object({ bpm: z.number(), times: z.array(z.number()), downbeats: z.array(z.number()), confidence: z.number() }),
           cues: z.array(assetCue),
+            provenance: z.object({ integration: z.string(), tool: z.string(), prompt: z.string().optional(), params: z.record(z.string(), z.unknown()).optional() }),
         })
         .partial(),
     }),

@@ -4,7 +4,7 @@ import { CAPTURE_IPC, type CaptureSessionState } from '../shared/capture'
 import path from 'node:path'
 import { arm, beginRecording, focusWindow, captureFolder, captureFree, discardRecording, finishRecording, forgetRecording, helperState, listSources, pickCaptureFolder, recoverable, recoverRecording, resetCaptureFolder, setSession, startAppAudio, startCursor, stopStream, windowInfo } from './capture'
 import { collectProject } from './collect'
-import { abortExport, beginExport, beginFile, finishExport, forgetPicked, openPicked, pickExport, restartExport, writeExport, writeFrame, writeSidecar, type ExportRequest } from './export'
+import { abortExport, beginExport, beginFile, finishCompatibleExport, finishExport, forgetPicked, openPicked, pickExport, restartExport, writeExport, writeFrame, writeSidecar, type ExportRequest } from './export'
 import { mediaRoot } from './integrations/paths'
 import { listVersions } from './versions'
 import { openPath, pickMedia, register, relink, reveal, saveMedia, urlForPath } from './files'
@@ -95,7 +95,7 @@ export function registerAppIpc(isTrustedUrl: (url: string) => boolean, getStartu
   handle(APP_IPC.exportFrame, (_win, id: unknown, index: unknown, data: unknown) => writeFrame(str(id), Number(index), data as Uint8Array))
   handle(APP_IPC.exportSidecar, (_win, file: unknown, ext: unknown, text: unknown) => writeSidecar(str(file), str(ext), str(text)))
   handle(APP_IPC.exportRestart, (_win, id: unknown) => restartExport(str(id)))
-  handle(APP_IPC.exportFinish, (_win, id: unknown) => finishExport(str(id)))
+  handle(APP_IPC.exportFinish, (_win, id: unknown, compatibleH264: unknown) => compatibleH264 === true ? finishCompatibleExport(str(id)) : finishExport(str(id)))
   handle(APP_IPC.exportAbort, (_win, id: unknown) => abortExport(str(id)))
   on(APP_IPC.exportProgress, (win, value: unknown) => {
     const v = typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : -1

@@ -35,6 +35,9 @@ import { ATTACHMENT_TOOLS } from './tools/attachments'
 import { CAPTURE_TOOLS } from './tools/capture'
 import { INGEST_TOOLS } from './tools/ingest'
 import { WEB_TOOLS } from './tools/web'
+import { LOCAL_SHORT_TOOLS } from './tools/local-short'
+import { LOCAL_AUDIO_TOOLS } from './tools/local-audio'
+import { RETAKE_TOOLS } from './tools/retakes'
 
 const PLACE = bool('Put the finished clip on the timeline at the playhead (default true).')
 const WAIT = num('Seconds to wait for the render before returning (default 90, max 600; through Lumen’s MCP server at most 15). If it is still running, poll get_job.', { minimum: 0, maximum: 600 })
@@ -457,18 +460,18 @@ const INTEGRATION_TOOLS: AgentTool[] = [
       { asset_id: str('Media id from get_project'), language_code: str('Optional ISO language code, e.g. "en"'), provider: str('Optional: which service', { enum: ['elevenlabs', 'openai', 'local'] }) },
       ['asset_id'],
     ),
-    run: async (a) => {
-      const asset = getProject().assets[String(a.asset_id)]
+      run: async (a, ctx) => {
+        const asset = getProject().assets[String(a.asset_id)]
       if (!canTranscribe(asset)) throw new Error('Only audio or video with sound can be transcribed.')
       const using = typeof a.provider === 'string' && transcribers().includes(a.provider as Transcriber) ? (a.provider as Transcriber) : undefined
-      const transcript = await transcribeMedia(String(a.asset_id), { using, language: typeof a.language_code === 'string' ? a.language_code : undefined })
+        const transcript = await transcribeMedia(String(a.asset_id), { using, language: typeof a.language_code === 'string' ? a.language_code : undefined, signal: ctx?.signal })
       return { phrases: transcript.length, transcript: transcript.slice(0, 60) }
     },
   },
   {
     name: 'find_pauses',
     description: 'Measure the long pauses in the speech on the timeline (from the audio itself, or transcripts). Returns the timeline spans remove_pauses would cut, in seconds (only where every speaker is quiet), and which clips were analysed.',
-    inputSchema: obj({ clip_ids: { type: 'array', items: { type: 'string' }, description: 'Only these clips (default: every clip with speech)' }, min_gap_seconds: num('Shortest pause to report (default 0.6)', { minimum: 0.2, maximum: 5 }) }),
+    inputSchema: obj({ clip_ids: { type: 'array', items: { type: 'string' }, description: 'Only these clips (default: every clip with speech)' }, min_gap_seconds: num('Shortest pause to report (default 0.35 for short-form pacing)', { minimum: 0.2, maximum: 5 }) }),
     run: async (a) => {
       const p = getProject()
       const fps = p.settings.fps
@@ -486,7 +489,7 @@ const INTEGRATION_TOOLS: AgentTool[] = [
   {
     name: 'remove_pauses',
     description: 'Cut long pauses out of the speech (keeping a little breath around each line). The whole timeline closes up around each cut, so captions, B-roll, effects and markers stay in sync; music beds play on through the joins. Only cuts where every speaker is quiet. One undo step.',
-    inputSchema: obj({ clip_ids: { type: 'array', items: { type: 'string' }, description: 'Only these clips (default: every clip with speech)' }, min_gap_seconds: num('Shortest pause to cut (default 0.6)', { minimum: 0.2, maximum: 5 }) }),
+    inputSchema: obj({ clip_ids: { type: 'array', items: { type: 'string' }, description: 'Only these clips (default: every clip with speech)' }, min_gap_seconds: num('Shortest pause to cut (default 0.35 for short-form pacing); leaves 0.12 seconds of breath on either side', { minimum: 0.2, maximum: 5 }) }),
     run: async (a) => {
       const r = await removePauses({ clipIds: Array.isArray(a.clip_ids) ? a.clip_ids.map(String) : undefined, minGap: typeof a.min_gap_seconds === 'number' ? a.min_gap_seconds : undefined })
       useUI.getState().markAiTouched(r.clips)
@@ -711,7 +714,7 @@ function mcpAgentTools(servers: Record<string, McpServerState>): AgentTool[] {
 
 let cache: AgentTool[] | null = null
 export function agentTools(servers: Record<string, McpServerState> = useIntegrations.getState().servers): AgentTool[] {
-  cache ??= [...INTEGRATION_TOOLS, ...VISION_TOOLS, ...INSPECT_TOOLS, ...CONTROL_TOOLS, ...FOOTAGE_TOOLS, ...WEB_TOOLS, ...SKILL_TOOLS, ...BEAT_TOOLS, ...SUBJECT_TOOLS, ...INGEST_TOOLS, ...CAPTURE_TOOLS, ...ATTACHMENT_TOOLS, ...editorTools()]
+  cache ??= [...RETAKE_TOOLS, ...LOCAL_AUDIO_TOOLS, ...LOCAL_SHORT_TOOLS, ...INTEGRATION_TOOLS, ...VISION_TOOLS, ...INSPECT_TOOLS, ...CONTROL_TOOLS, ...FOOTAGE_TOOLS, ...WEB_TOOLS, ...SKILL_TOOLS, ...BEAT_TOOLS, ...SUBJECT_TOOLS, ...INGEST_TOOLS, ...CAPTURE_TOOLS, ...ATTACHMENT_TOOLS, ...editorTools()]
   const mcp = mcpAgentTools(servers)
   return mcp.length ? [...cache, ...mcp] : cache
 }

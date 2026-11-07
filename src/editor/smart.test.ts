@@ -56,6 +56,12 @@ function setup() {
 beforeEach(() => activity.clear())
 
 describe('findPauses', () => {
+  it('tightens a noticeable sub-second speaking gap by default while keeping breath', async () => {
+    const { p, add, withAsset } = setup()
+    add('Voice', 'audio', 0, 150, { assetId: withAsset(asset(5, [[0, 2], [2.45, 5]])) })
+    const reports = await findPauses(p)
+    expect(reports.flatMap(r => r.cuts)).toEqual([[64, 70]])
+  })
   it('finds long silences between phrases, keeping a breath either side', async () => {
     const { p, add, withAsset } = setup()
     const voice = add('Voice', 'audio', 0, 210, { assetId: withAsset(asset(7, [[0, 2], [3.5, 5], [5.3, 7]])) })
@@ -71,8 +77,8 @@ describe('findPauses', () => {
     const { p, add, withAsset } = setup()
     add('Voice', 'audio', 30, 60, { inPoint: 30, speed: 2, assetId: withAsset(asset(10, [[0, 2], [3.5, 5]])) })
     const [r] = await findPauses(p)
-    // Source 2.12s → timeline 30 + (2.12 - 1) * 30 / 2 = 46.8
-    expect(r.cuts).toEqual([[47, 66]])
+    // Breath padding is timeline time, even on a clip playing at 2x speed.
+    expect(r.cuts).toEqual([[49, 64]])
   })
 
   it('falls back to transcript timings when the audio can’t be measured', async () => {
@@ -84,6 +90,68 @@ describe('findPauses', () => {
     expect(r.from).toBe('transcript')
     expect(r.cuts).toEqual([[64, 116]])
   })
+
+  it('finds a pause made from one cut clip’s tail and the next clip’s head', async () => {
+    const { p, add, withAsset } = setup()
+    const id = withAsset(asset(15, [[0, 4.17], [10.31, 14]]))
+    add('Voice', 'audio', 0, 135, { assetId: id })
+    add('Voice', 'audio', 135, 120, { assetId: id, inPoint: 300 })
+    const reports = await findPauses(p, { minGap: 0.5 })
+    // Speech ends4.17 and resumes4.81; keep120ms on BOTH sides.
+    expect(reports.flatMap(r => r.cuts)).toEqual([[129, 141]])
+  })
+
+  it('merges overlapping speakers and never mistakes their overlap for silence', async () => {
+    const { p, add, withAsset } = setup()
+    p.tracks.push(createTrack('audio', { name: 'Interview B' }))
+    add('Voice', 'audio', 0, 180, { assetId: withAsset(asset(6, [[0, 1], [5, 6]])) })
+    add('Interview B', 'audio', 0, 180, { assetId: withAsset(asset(6, [[0.8, 5.2]])) })
+    expect(await findPauses(p)).toEqual([])
+  })
+
+  it('keeps short natural gaps and allows preserving outer lead-in and tail', async () => {
+    const { p, add, withAsset } = setup()
+    add('Voice', 'audio', 0, 300, { assetId: withAsset(asset(10, [[2, 3], [3.4, 4]])) })
+    expect(await findPauses(p, { minGap: 0.5, trimEdges: false })).toEqual([])
+  })
+
+  it('trims measured leading and trailing silence while keeping120ms of breath', async () => {
+    const { p, add, withAsset } = setup()
+    add('Voice', 'audio', 0, 1125, { assetId: withAsset(asset(37.5, [[0.8, 35.1]])) })
+    expect((await findPauses(p)).flatMap(r => r.cuts)).toEqual([[0, 20], [1057, 1125]])
+  })
+
+  it('does not infer outer silence from transcript-only or unknown speech', async () => {
+    const { p, add, withAsset } = setup()
+    p.tracks.find(t => t.name === 'Voice')!.muted = true
+    add('Voice', 'audio', 0, 300, { assetId: withAsset(asset(10, [], { transcript: [{ start: 2, end: 4, text: 'Quiet words may be omitted.' }] })) })
+    expect(await findPauses(p)).toEqual([])
+  })
+
+  it('resolves selected detached videos to aligned enhanced voice audio, not noisy originals', async () => {
+    const { p, add, withAsset } = setup()
+    const raw = withAsset(asset(15, [[0, 15]], { kind: 'video' }))
+    const enhanced = withAsset(asset(15, [[0, 4.17], [10.31, 14]], { provenance: { integration: 'local-audio', tool: 'enhance_local_voice', params: { original_asset_id: raw } } }))
+    const ids: string[] = []
+    for (const [start, duration, inPoint, groupId] of [[0, 135, 0, 'first'], [135, 120, 300, 'second']] as const) {
+      const video = add('Main', 'video', start, duration, { assetId: raw, inPoint, groupId })
+      video.audio.detached = true; ids.push(video.id)
+      add('Voice', 'audio', start, duration, { assetId: enhanced, inPoint, groupId })
+    }
+    expect((await findPauses(p, { clipIds: ids, minGap: 0.5 })).flatMap(r => r.cuts)).toEqual([[129, 141]])
+    expect((await findPauses(p, { clipIds: ids, minGap: 0.5 })).every(r => r.clip.kind === 'audio')).toBe(true)
+  })
+
+  it('does not fall back to raw source for detached video without matching audible sound', async () => {
+    const { p, add, withAsset } = setup()
+    const raw = withAsset(asset(8, [[0, 1], [3, 8]], { kind: 'video' }))
+    const video = add('Main', 'video', 0, 240, { assetId: raw, groupId: 'video-group' })
+    video.audio.detached = true
+    const shifted = add('Voice', 'audio', 1, 239, { assetId: raw, groupId: 'video-group' })
+    expect(await findPauses(p, { clipIds: [video.id] })).toEqual([])
+    delete p.clips[shifted.id]
+    expect(await findPauses(p, { clipIds: [video.id] })).toEqual([])
+  })
 })
 
 describe('silentCuts', () => {
@@ -92,7 +160,9 @@ describe('silentCuts', () => {
     p.tracks.push(createTrack('audio', { name: 'Interview B' }))
     add('Voice', 'audio', 0, 210, { assetId: withAsset(asset(7, [[0, 2], [3.5, 7]])) })
     add('Interview B', 'audio', 0, 210, { assetId: withAsset(asset(7, [[2.3, 3.0]])) })
-    expect(await silentCuts(p, await findPauses(p))).toEqual([])
+    // The shared 0.5s silence after speaker B is eligible at the short-form
+    // default, but their line and 120ms breath remain protected.
+    expect(await silentCuts(p, await findPauses(p))).toEqual([[94, 101]])
   })
 
   it('keeps the part of a pause where everyone is quiet', async () => {
@@ -105,6 +175,27 @@ describe('silentCuts', () => {
 })
 
 describe('removePauses', () => {
+  it('cuts a boundary pause with linked video/voice and captions in one undo step', async () => {
+    const { add, withAsset, load, on } = setup()
+    const id = withAsset(asset(15, [[0, 4.6], [10.4, 15]], { kind: 'video' }))
+    for (const [start, inPoint, groupId] of [[0, 0, 'first'], [150, 300, 'second']] as const) {
+      const video = add('Main', 'video', start, 150, { assetId: id, inPoint, groupId })
+      video.audio.detached = true
+      add('Voice', 'audio', start, 150, { assetId: id, inPoint, groupId })
+    }
+    add('Titles', 'text', 174, 30, { name: 'caption after pause' })
+    load()
+    const before = structuredClone(getProject())
+    const result = await removePauses({ minGap: 0.5 })
+    expect(result.removed).toBe(1)
+    expect(result.seconds).toBeCloseTo(16 / 30)
+    expect(on('Main')).toEqual(on('Voice'))
+    expect(on('Main').at(-1)?.[1]).toBe(284)
+    expect(on('Titles')).toEqual([[158, 188]])
+    useEditor.getState().undo()
+    expect(getProject()).toEqual(before)
+  })
+
   it('closes up the whole timeline: captions and effects follow, music plays through', async () => {
     const { add, withAsset, load, on } = setup()
     add('Voice', 'audio', 0, 210, { assetId: withAsset(asset(7, [[0, 2], [3.5, 5], [5.3, 7]])) })

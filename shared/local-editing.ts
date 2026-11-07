@@ -1,0 +1,31 @@
+/** Explicit native/on-device catalog: connected external servers cannot leak footage. */
+export const LOCAL_EDIT_TOOL_NAMES = new Set(`
+get_editing_state prepare_native_short transcribe_local_media
+find_retakes apply_retakes
+set_native_zoom_endpoint set_native_transition
+set_native_text_duration
+restore_native_source_gap
+enhance_local_voice clip_replaceAsset timeline_restoreSourceGap
+get_local_media get_project place_asset seek render_3d_title render_3d_background
+render_blender_script blender_live render_motion_graphic render_hyperframes_html
+transcribe_media find_pauses remove_pauses add_captions duck_music reframe
+add_sound_effect import_media_file get_job get_frame get_contact_sheet get_media_frames
+get_editor_screenshot get_clips_at get_clip find_media get_transcript analyze_audio
+get_history list_catalog batch_edit add_title undo redo select_clips playback
+save_project export_video graphics_report list_timelines import_subtitles
+export_subtitles detect_scenes create_multicam stabilize_clip track_motion render_queue
+list_skills use_skill read_skill_file detect_beats cut_to_beats cut_out_subject
+ingest_start ingest_status list_capture_sources start_recording recording_status
+pause_recording add_recording_marker stop_recording zoom_on_clicks highlight_clicks
+record_studio_take read_attachment clip_add clip_move clip_trim clip_roll clip_slip
+clip_slide clip_split clip_delete timeline_removeRange clip_update clip_duplicate
+clip_setTransition clip_paste clip_copyAttributes clip_detachAudio clip_reattachAudio
+clip_group clip_ungroup clip_freeze clip_setSpeedRamp effect_add effect_update
+effect_remove mask_add mask_update mask_remove keyframe_set keyframe_remove
+keyframe_clear keyframe_move clip_animate track_add track_update track_move track_remove
+mix_update timeline_setRange timeline_liftRange timeline_insertRange marker_add marker_update marker_remove
+lut_add lut_remove font_add font_remove asset_add asset_update asset_remove
+sequence_create sequence_open sequence_rename sequence_duplicate sequence_delete
+clip_nest clip_unnest multicam_create multicam_switch project_update get_tool_result
+`.trim().split(/\s+/))
+export const isLocalEditingTool = (name: string) => LOCAL_EDIT_TOOL_NAMES.has(name)

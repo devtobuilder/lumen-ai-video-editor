@@ -38,13 +38,13 @@
     "url": "https://github.com/Mas-inx"
   },
   "license": "MIT",
-  "homepage": "https://github.com/Mas-inx/lumen-ai-video-editor#readme",
+  "homepage": "https://github.com/devtobuilder/lumen-ai-video-editor#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Mas-inx/lumen-ai-video-editor.git"
+    "url": "git+https://github.com/devtobuilder/lumen-ai-video-editor.git"
   },
   "bugs": {
-    "url": "https://github.com/Mas-inx/lumen-ai-video-editor/issues"
+    "url": "https://github.com/devtobuilder/lumen-ai-video-editor/issues"
   },
   "type": "module",
   "main": "dist-electron/main.js",
@@ -59,7 +59,8 @@
     "preview:web": "vite preview --mode web",
     "build:helper": "node scripts/build-capture-helper.mjs",
     "pack": "npm run build && npm run build:helper && install-electron && electron-builder --dir --publish never",
-    "dist": "npm run build && npm run build:helper && install-electron && electron-builder --win nsis --publish never"
+    "dist": "npm run build && npm run build:helper && install-electron && electron-builder --win nsis --publish never",
+    "check:publication": "node scripts/check-publication.mjs"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.60",
@@ -126,7 +127,7 @@
   "build": {
     "appId": "app.lumen.editor",
     "productName": "Lumen",
-    "copyright": "Copyright © 2026 Mas-Inx",
+    "copyright": "Copyright \u00a9 2026 Mas-Inx",
     "directories": {
       "output": "release",
       "buildResources": "build"
@@ -157,7 +158,7 @@
     "publish": [
       {
         "provider": "github",
-        "owner": "Mas-inx",
+        "owner": "devtobuilder",
         "repo": "lumen-ai-video-editor",
         "releaseType": "release"
       }

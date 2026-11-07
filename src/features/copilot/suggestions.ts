@@ -1,5 +1,6 @@
 /** Starter prompts for the Copilot (and the command palette). They go to whichever brain is connected. */
 export const STARTERS = [
+  { title: 'Make a local short', subtitle: 'Editable cuts, captions and audio', prompt: 'Create a native editable vertical short from my original imported recording using prepare_native_short. Use native animated bold captions, subtle punch-in keyframes and voice cleanup. Remove long pauses, and inspect the transcript for clear mistakes or repeated takes while preserving meaning. Add a short native title. Keep captions, audio and every edit revisable in Lumen. Do not render or export yet. No music or sound effects.' },
   { title: 'Tighten the speech', subtitle: 'Cut long pauses and dead air', prompt: 'Remove the long pauses from the speech in my edit' },
   { title: 'Add captions', subtitle: 'Transcribe and lay subtitles', prompt: 'Transcribe the speech and add captions' },
   { title: 'Make it cinematic', subtitle: 'One grade across every shot', prompt: 'Give every shot a consistent cinematic color grade' },

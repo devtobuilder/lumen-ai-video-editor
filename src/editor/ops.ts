@@ -67,7 +67,7 @@ export function cloneClip(c: Clip): Clip {
 // Commands just place clips (a -0.5 frame nudge means "insert before a clip
 // that starts here"); `normalizeProject` then packs the track after every command.
 
-export const isMagnetic = (track?: Pick<Track, 'role'>) => track?.role === 'main'
+export const isMagnetic = (track?: Pick<Track, 'role' | 'magnetic'>) => track?.role === 'main' && track.magnetic !== false
 
 export const isMagneticTrack = (p: Project, trackId: string) => isMagnetic(p.tracks.find((t) => t.id === trackId))
 
@@ -820,6 +820,8 @@ export function detachAudio(p: Project, clip: Clip): Clip {
 /** Undoes detachAudio: the linked sound clip goes and the video plays its own sound again, with the sound clip's mix. */
 export function reattachAudio(p: Project, clip: Clip) {
   if (!clip.audio.detached) return
+  const groupedSound = clip.groupId ? Object.values(p.clips).filter(c => c.groupId === clip.groupId && c.kind === 'audio') : []
+  if (groupedSound.some(c => c.assetId !== clip.assetId)) throw new Error('This video is linked to audio from a different source, such as an enhanced voice WAV. Keep that audio on its separate track, or undo the source replacement before reattaching. Reattaching now would play both sources.')
   const linked = clip.groupId ? Object.values(p.clips).filter((c) => c.groupId === clip.groupId && c.kind === 'audio' && c.assetId === clip.assetId) : []
   const sound = linked[0]
   if (sound) {

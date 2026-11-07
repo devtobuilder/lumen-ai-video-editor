@@ -14,7 +14,7 @@ import { sourceFrameAt, speedAt } from '@/editor/timing'
 import type { AnimPreset, BlendMode, Clip, Crop, Effect, EffectKind, Mask, Project, Track, Transition } from '@/editor/types'
 import { clamp, easeInOutCubic, easeOutBack, easeOutCubic, lerp, noise1 } from '@/lib/math'
 import { gradeFilter, gradeOverlays } from './color'
-import { fontCss, fontFileUrl } from './fonts'
+import { fontFileUrl,textFontCss,textFontReady } from './fonts'
 import { gpuGrade, needsGpuGrade } from './gl-grade'
 import { usePlayback } from '@/editor/playback'
 import { useUI } from '@/editor/ui-store'
@@ -25,6 +25,7 @@ import { renderLayer3D } from './three/layer'
 import { createStage, frameStage, scratchCanvas as scratchLayer, type Stage } from './three/stage'
 import { renderText3D } from './three/text'
 import { renderTransition3D } from './three/transitions'
+import { fitTextLines, stableTextWidth } from './text-layout'
 
 /** On-screen footprint of a clip, in project pixels (center-based). */
 export interface ClipBounds {
@@ -170,6 +171,9 @@ export function renderFrame(ctx: CanvasRenderingContext2D, project: Project, fra
   const W = ctx.canvas.width
   const H = ctx.canvas.height
   const bounds = new Map<string, ClipBounds>()
+  // Prime future caption faces too, rather than first requesting them when a
+  // caption appears. Font loading completion schedules a paused-preview redraw.
+  for(const clip of Object.values(project.clips))if(clip.kind==='text'&&clip.text)textFontReady(project,clip.text,W/project.settings.width)
   beginVideoFrame()
 
   ctx.save()
@@ -406,6 +410,7 @@ function drawClip(ctx: CanvasRenderingContext2D, project: Project, clip: Clip, f
   const H = ctx.canvas.height
   const { width: PW, height: PH, fps } = project.settings
   const k = W / PW
+  if(clip.kind==='text'&&clip.text&&!textFontReady(project,clip.text,k))return
   const t = local / fps
   const anim = animState(clip, local)
 
@@ -463,7 +468,7 @@ function drawClip(ctx: CanvasRenderingContext2D, project: Project, clip: Clip, f
   const wipe = Math.min(anim.wipe, mods.wipe ?? 1)
 
   if (clip.kind === 'text' && clip.text) {
-    const box = drawText(ctx, project, clip, k, anim.reveal, wipe, anim.blur + (mods.blur ?? 0))
+    const box = drawText(ctx, project, clip, k, anim.reveal, wipe, anim.blur + (mods.blur ?? 0), stableTextWidth(PW,clip.transform) * k)
     bounds.set(clip.id, { cx: PW / 2 + x, cy: PH / 2 + y, w: (box.w / k) * scale, h: (box.h / k) * scale, rotation })
     ctx.restore()
     return
@@ -550,7 +555,7 @@ function draw3D(ctx: CanvasRenderingContext2D, project: Project, clip: Clip, loc
     const wipe = Math.min(p.anim.wipe, p.mods.wipe ?? 1)
     if (clip.kind === 'text' && clip.text) {
       flat.ctx.translate(W / 2, H / 2)
-      const box = drawText(flat.ctx, project, clip, k, p.anim.reveal, wipe, p.anim.blur + (p.mods.blur ?? 0))
+      const box = drawText(flat.ctx, project, clip, k, p.anim.reveal, wipe, p.anim.blur + (p.mods.blur ?? 0), stableTextWidth(PW,clip.transform) * k)
       bw = (box.w / k) * p.scale
       bh = (box.h / k) * p.scale
     } else {
@@ -832,18 +837,20 @@ const blurFilter = (px: number) => (px > 0.05 ? `blur(${px.toFixed(2)}px)` : 'no
 // ─── Text ────────────────────────────────────────────────────────────────
 
 const measureCache = new Map<string, number>()
+// A preview can measure fallback glyphs before an embedded font is ready.
+// Export waits for fonts, so discard those early widths when fonts finish loading.
+if (typeof document !== 'undefined') document.fonts?.addEventListener('loadingdone', () => measureCache.clear())
 
-function drawText(ctx: CanvasRenderingContext2D, project: Project, clip: Clip, k: number, reveal: number, wipe: number, blur: number) {
+function drawText(ctx: CanvasRenderingContext2D, project: Project, clip: Clip, k: number, reveal: number, wipe: number, blur: number, maxWidth: number) {
   const st = clip.text!
   const size = st.size * k
   const content = st.uppercase ? st.content.toUpperCase() : st.content
-  const lines = content.split('\n')
-  ctx.font = `${st.italic ? 'italic ' : ''}${st.weight} ${size}px ${fontCss(st.font, project)}`
+  ctx.font = textFontCss(st,project,k)
   ctx.letterSpacing = `${(st.letterSpacing * size).toFixed(2)}px`
   ctx.textBaseline = 'middle'
   ctx.textAlign = st.align
 
-  const widths = lines.map((line) => {
+  const measure = (line: string) => {
     const key = `${ctx.font}|${ctx.letterSpacing}|${line}`
     let w = measureCache.get(key)
     if (w === undefined) {
@@ -851,11 +858,15 @@ function drawText(ctx: CanvasRenderingContext2D, project: Project, clip: Clip, k
       measureCache.set(key, w)
     }
     return w
-  })
+  }
+  const padX = st.background ? size * 0.5 : size * 0.12
+  const fit = fitTextLines(content, measure, maxWidth, Math.max(padX, (st.outline?.width ?? 0) * size))
+  const { lines, widths } = fit
+  ctx.save()
+  ctx.scale(fit.scale, fit.scale)
   const maxW = Math.max(1, ...widths)
   const lh = size * st.lineHeight
   const totalH = lh * lines.length
-  const padX = st.background ? size * 0.5 : size * 0.12
   const padY = st.background ? size * 0.32 : size * 0.1
   const boxW = maxW + padX * 2
   const boxH = totalH + padY * 2
@@ -875,7 +886,7 @@ function drawText(ctx: CanvasRenderingContext2D, project: Project, clip: Clip, k
     ctx.fill()
   }
 
-  const total = content.replace(/\n/g, '').length
+  const total = lines.join('').length
   const budget = reveal >= 1 ? Infinity : Math.floor(total * reveal)
 
   const outline = st.outline && st.outline.width > 0 ? st.outline : null
@@ -921,7 +932,8 @@ function drawText(ctx: CanvasRenderingContext2D, project: Project, clip: Clip, k
     ctx.shadowOffsetY = size * 0.04 * st.shadow
     paint()
   } else paint()
-  return { w: boxW, h: boxH }
+  ctx.restore()
+  return { w: boxW * fit.scale, h: boxH * fit.scale }
 }
 
 // ─── Texture helpers ─────────────────────────────────────────────────────

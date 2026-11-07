@@ -5,7 +5,8 @@ import { toast } from 'sonner'
 import { AiSparkle } from '@/components/brand'
 import { IconButton } from '@/components/ui/button'
 import { Slider } from '@/components/ui/slider'
-import { useEditor } from '@/editor/store'
+import { dispatch, useEditor } from '@/editor/store'
+import { isMagnetic } from '@/editor/ops'
 import { useUI, ZOOM_MAX, ZOOM_MIN } from '@/editor/ui-store'
 import { formatDuration } from '@/lib/time'
 import { suggestFor, type Suggestion } from '@/editor/smart'
@@ -22,6 +23,8 @@ export function TimelineToolbar() {
   const pps = useUI((s) => s.pxPerSecond)
   const setZoom = useUI((s) => s.setZoom)
   const hasSelection = useUI((s) => s.selection.length > 0)
+  const mainTrack = useEditor((s) => s.project.tracks.find((t) => t.role === 'main'))
+  const magnetic = isMagnetic(mainTrack)
 
   return (
     <div className="flex h-11 shrink-0 items-center gap-1 border-b border-line px-2">
@@ -44,6 +47,8 @@ export function TimelineToolbar() {
           <MoveHorizontal />
         </IconButton>
       </div>
+      {tool === 'roll' && <span className="text-[10px] text-warn">Roll changes both clips · V selects</span>}
+      {tool === 'slide' && <span className="text-[10px] text-warn">Slide trims neighbors · V selects</span>}
       <div className="mx-1.5 h-4 w-px bg-line-2" />
       <IconButton label="Split at playhead" shortcut="s" onClick={actions.split}>
         <SquareSplitHorizontal />
@@ -55,6 +60,17 @@ export function TimelineToolbar() {
         <Trash />
       </IconButton>
       <div className="mx-1.5 h-4 w-px bg-line-2" />
+      {mainTrack && <button
+        type="button"
+        aria-pressed={magnetic}
+        title={magnetic ? 'Magnetic timeline: trims and deletes close gaps. Turn off to keep other clips in place.' : 'Free timeline: trims and deletes leave gaps. Shift+Delete closes a gap explicitly.'}
+        className="flex h-7 shrink-0 items-center gap-1 rounded-md border border-line px-2 text-[10px] text-fg-3 hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-accent"
+        onClick={() => {
+          const r = dispatch('track.update', { id: mainTrack.id, patch: { magnetic: !magnetic } })
+          if (!r.ok) toast(r.error)
+          else toast(!magnetic ? 'Magnetic timeline on: edits close gaps' : 'Magnetic timeline off: edits keep other clips in place')
+        }}
+      ><UnfoldHorizontal className="size-3" />Magnetic {magnetic ? 'on' : 'off'}</button>}
       <IconButton label={snapping ? 'Snapping on' : 'Snapping off'} shortcut="n" active={snapping} onClick={toggleSnapping}>
         <Magnet />
       </IconButton>

@@ -313,7 +313,7 @@ export interface AppAPI {
     sidecar(exportPath: string, extension: 'srt' | 'vtt', text: string): Promise<string>
     /** Empties the file to write it again from the start (another encoder takes over). */
     restart(id: string): Promise<void>
-    finish(id: string): Promise<{ path: string; size: number }>
+    finish(id: string, compatibleH264?: boolean): Promise<{ path: string; size: number }>
     /** Stops an export and deletes the partial file. */
     abort(id: string): Promise<void>
     /** Taskbar progress (0..1), or null to clear. */

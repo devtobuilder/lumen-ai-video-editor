@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { createClip } from '@/editor/defaults'
-import { activeRegions, clipGainAt, computePeaks } from './audio-engine'
+import { activeRegions, clipGainAt, computePeaks, regionsFromLevels } from './audio-engine'
 import { videoBitrate } from './export'
 import { encodeWav } from './wav'
 
@@ -30,6 +30,21 @@ function speechLike(seconds: number, spans: [number, number][], sampleRate = 160
 }
 
 describe('activeRegions', () => {
+  it('separates residual breaths from speech after neural cleanup without losing quiet words', () => {
+    const levels = (...parts: [number, number][]) => Float32Array.from(parts.flatMap(([seconds, db]) => Array(Math.round(seconds / 0.02)).fill(db)))
+    const regions = regionsFromLevels(levels([0.5, -100], [1, -18], [0.7, -52], [0.3, -40], [1, -18], [1, -50]))
+    expect(regions).toHaveLength(2)
+    expect(regions[0][0]).toBeCloseTo(0.5)
+    expect(regions[0][1]).toBeCloseTo(1.5)
+    expect(regions[1][0]).toBeCloseTo(2.2)
+    expect(regions[1][1]).toBeCloseTo(3.5)
+    // A quieter microphone must not inherit a fixed threshold suitable only
+    // for the loud recording above: retain its low-level words too.
+    const quiet = regionsFromLevels(levels([0.5, -100], [1, -45], [0.7, -90], [0.3, -52], [1, -45], [1, -90]))
+    expect(quiet).toHaveLength(2)
+    expect(quiet[1][0]).toBeCloseTo(2.2)
+    expect(quiet[1][1]).toBeCloseTo(3.5)
+  })
   it('finds where the sound is, to within a couple of hops', () => {
     const regions = activeRegions(speechLike(8, [[0.5, 2], [3.4, 5], [5.2, 7]]))
     // The 0.2s gap is shorter than a pause, so the last two phrases merge.

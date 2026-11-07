@@ -1,9 +1,10 @@
+import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { app, BrowserWindow, dialog } from 'electron'
 import type { ExportHandle, ExportTarget } from '../shared/app'
-import { ensureDir } from './integrations/paths'
+import { ensureDir, readJson } from './integrations/paths'
 
 /**
  * Export files: the editor encodes (WebCodecs) and streams the container bytes
@@ -248,4 +249,28 @@ export function writeSidecar(exportPath: string, extension: string, text: string
   const target = isDir ? path.join(abs, `${path.basename(abs)}.${ext}`) : `${abs.slice(0, abs.length - path.extname(abs).length)}.${ext}`
   fs.writeFileSync(target, String(text), 'utf8')
   return target
+}
+
+/** Use the locally verified H.264 encoder before publishing an MP4 export. */
+export async function finishCompatibleExport(id: string) {
+  const e = get(id)
+  if (e.kind !== 'file' || path.extname(e.path).toLowerCase() !== '.mp4') throw new Error('Compatible H.264 requires an MP4 file.')
+  const root = process.env.LUMEN_LOCAL_VIDEO_ROOT || readJson<{ root?: string }>('local-video-engine.json', {}).root
+  if (!root) throw new Error('Local compatibility encoder is not configured.')
+  const encoded = `${e.partial}.compatible.mp4`
+  fs.fsyncSync(e.fd)
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(path.join(root, 'work', 'venv', 'Scripts', 'python.exe'), [path.join(root, 'local-engine', 'compatible_export.py'), e.partial, encoded], { windowsHide: true, cwd: root })
+      let errors = ''
+      child.stderr.on('data', (b: Buffer) => { errors = (errors + b.toString()).slice(-3000) })
+      child.once('error', reject)
+      child.once('close', code => code === 0 ? resolve() : reject(new Error(`Compatibility encoding failed: ${errors}`)))
+    })
+    if (open.get(id) !== e) throw new Error('Export was cancelled.')
+    fs.closeSync(e.fd)
+    fs.renameSync(encoded, e.partial)
+    e.fd = fs.openSync(e.partial, 'r')
+    return finishExport(id)
+  } finally { fs.rmSync(encoded, { force: true }) }
 }

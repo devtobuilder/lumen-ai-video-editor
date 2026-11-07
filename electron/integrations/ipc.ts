@@ -17,6 +17,8 @@ import { localAgentStates, signInLocal } from './ai/local-agents'
 import { signInOpenRouter } from './ai/openrouter'
 import { listModels, providerStates, setProvider } from './ai/providers'
 import { transcribeWithOpenAI } from './ai/transcribe'
+import { localShort, cancelLocalShort, transcribeLocal } from './local-short'
+import { enhanceLocalVoice, cancelLocalVoiceEnhancement } from './local-audio'
 import { generateImage, generateVideo, mediaModels } from './ai/media-gen'
 import { cleanTarget, PROVIDERS, type AgentRunRequest, type AttachmentInput, type ChatAttachment, type LocalAgentId, type ProviderId } from '../../shared/ai'
 
@@ -137,6 +139,12 @@ export function registerIntegrationIpc(isTrustedUrl: (url: string) => boolean) {
     const seconds = Math.max(1, Math.min(60, Math.round(Number(req?.seconds) || 8)))
     return generateVideo({ provider: genProvider(req?.provider), model: String(req?.model ?? ''), prompt: String(req?.prompt ?? '').slice(0, 4000), aspect, seconds, resolution: req?.resolution })
   })
+  handle(IPC.localShort, (req: Parameters<typeof localShort>[0]) => localShort(req))
+  handle(IPC.localShortCancel, (id: string) => cancelLocalShort(id))
+  handle(IPC.localTranscribe, (req: Parameters<typeof transcribeLocal>[0]) => transcribeLocal(req))
+  handle(IPC.localTranscribeCancel, (id: string) => cancelLocalShort(id))
+  handle(IPC.localVoiceEnhance, (req: Parameters<typeof enhanceLocalVoice>[0]) => enhanceLocalVoice(req))
+  handle(IPC.localVoiceCancel, (id: string) => cancelLocalVoiceEnhancement(id))
   handle(IPC.aiTranscribe, (wav: Uint8Array, language?: string) => {
     if (!(wav instanceof Uint8Array)) throw new Error('Expected WAV bytes')
     return transcribeWithOpenAI(wav, typeof language === 'string' && language ? language : undefined)

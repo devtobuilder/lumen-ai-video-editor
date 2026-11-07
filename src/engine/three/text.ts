@@ -14,6 +14,7 @@ import serifItalic from '@fontsource/instrument-serif/files/instrument-serif-lat
 import type { TextStyle } from '@/editor/types'
 import { notifyMediaReady } from '@/engine/media'
 import { rad, renderStage, type Stage } from './stage'
+import { fitProjectedText } from './text-fit'
 
 // ─── Fonts ───────────────────────────────────────────────────────────────
 
@@ -313,11 +314,12 @@ export function renderText3D(stage: Stage, text: Text3D) {
   s.mesh.material = mats
   s.root.position.set(text.x, -text.y, text.z)
   s.root.rotation.set(-rad(text.rotateX), rad(text.rotateY), -rad(text.rotation), 'YXZ')
-  s.root.scale.setScalar(text.scale)
+  const fit = fitProjectedText(g.geometry.boundingBox!, stage.pw, stage.distance, text)
+  s.root.scale.setScalar(text.scale * fit)
   // A light sweeping across metal titles makes them gleam.
   const metal = text.style.material === 'chrome' || text.style.material === 'gold'
   s.shine.intensity = metal ? 6 : 0
   s.shine.position.set(Math.sin(text.t * 0.9) * stage.pw * 0.55 + text.x, stage.ph * 0.15 - text.y, stage.distance * 0.35)
   const canvas = renderStage(stage, s.scene, text.style.material !== 'neon')
-  return { canvas, width: g.width, height: g.height }
+  return { canvas, width: g.width * fit, height: g.height * fit }
 }
